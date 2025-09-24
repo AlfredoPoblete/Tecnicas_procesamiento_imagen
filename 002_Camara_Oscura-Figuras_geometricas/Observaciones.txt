@@ -1,0 +1,11 @@
+Observaciones:
+
+Con los resultados obtenidos encontramos que el algoritmo detecta perfectamente los colores de la imagen capturada.
+
+* En diferentes tonos: La imagen es visible pese a estar no tan nítida
+
+* Más contraste: Mejora la separación entre luces y sombras; se perciben mas la forma del arbol.
+
+* Blanco y Negro: Todo parece más suave, con menos definición y profundidad.
+
+Es interesante notar que el aumento de 'nitidez' logrado por contraste no requiere mejorar la resolución, sino realzar contornos. Es fundamental equilibrar estos ajustes para mantener la fidelidad y autenticidad visual de la imagen.
