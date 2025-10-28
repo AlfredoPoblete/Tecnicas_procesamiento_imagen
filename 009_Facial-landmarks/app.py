@@ -75,18 +75,15 @@ with st.sidebar:
     - Nariz (puente, fosas)
     - Boca (labios, comisuras)
     - Contorno facial
-
     ### Estilos de Visualización
     - **Solo Puntos**: Puntos individuales
     - **Puntos + Malla**: Conexiones triangulares
     - **Contornos**: Solo ojos, boca y rostro
     - **Heatmap**: Densidad de puntos
-
     ### Métricas de Expresiones
     - **Apertura de boca**: Distancia entre labios
     - **Apertura de ojos**: Distancia entre párpados
     - **Inclinación de cabeza**: Ángulo de rotación
-
     ### Aplicaciones
     - Filtros AR (Instagram)
     - Análisis de expresiones
@@ -134,7 +131,7 @@ if uploaded_file is not None:
 
         with col1:
             st.subheader("Imagen Original")
-            st.image(cv2_to_pil(imagen_cv2), use_container_width=True)
+            st.image(cv2_to_pil(imagen_cv2), width=None)
 
         # Detectar landmarks
         with st.spinner("Detectando landmarks faciales..."):
@@ -144,7 +141,7 @@ if uploaded_file is not None:
 
         with col2:
             st.subheader("Landmarks Detectados")
-            st.image(cv2_to_pil(imagen_procesada), use_container_width=True)
+            st.image(cv2_to_pil(imagen_procesada), width=None)
 
         # Mostrar información de detección
         st.divider()
@@ -229,7 +226,7 @@ if uploaded_file is not None:
 
                 with col1:
                     st.subheader("Frame Original")
-                    st.image(cv2_to_pil(frame), use_container_width=True)
+                    st.image(cv2_to_pil(frame))
 
                 # Detectar landmarks en el frame
                 with st.spinner("Analizando expresiones..."):
@@ -240,7 +237,7 @@ if uploaded_file is not None:
                 with col2:
                     st.subheader("Análisis de Expresiones")
                     if info["deteccion_exitosa"]:
-                        st.image(cv2_to_pil(frame_procesado), use_container_width=True)
+                        st.image(cv2_to_pil(frame_procesado))
 
                         # Calcular métricas
                         alto, ancho = frame.shape[:2]
