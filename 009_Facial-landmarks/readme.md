@@ -20,7 +20,7 @@ Aplicación web para detectar 478 puntos clave en rostros humanos usando MediaPi
 
 ```bash
 # Clonar repositorio
-git clone https://github.com/tu-usuario/facial-landmarks-app.git
+git clone https://github.com/AlfredoPoblete/009_Facial-landmarks
 cd facial-landmarks-app
 
 # Crear entorno virtual
@@ -32,4 +32,5 @@ source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 
 # Ejecutar aplicación
+
 streamlit run app.py
