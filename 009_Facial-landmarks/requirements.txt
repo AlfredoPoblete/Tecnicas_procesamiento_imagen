@@ -1,7 +1,0 @@
-streamlit==1.50.0
-mediapipe==0.10.14
-opencv-python-headless==4.10.0.84
-numpy>=1.21.0,<2.0.0
-pillow>=8.0.0
-requests>=2.25.0
-protobuf==4.25.3
