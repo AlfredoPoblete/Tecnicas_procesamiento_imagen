@@ -1,0 +1,4 @@
+0 Hojas sanas
+1 Hojas afectadas por insectos
+2 Hojas con presencia de hongos
+3 Hojas con deficiencia de nutrientes
