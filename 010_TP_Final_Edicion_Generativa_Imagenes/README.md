@@ -1,6 +1,7 @@
 **Proyecto**: MVP Edición Generativa de Imágenes  
 **Curso**: Procesamiento Digital de Imágenes - IFTS24  
 **Alumno**: Alfredo Poblete
+
 **Profesor**: Matias Barreto
 
 **Año**: 2025  
@@ -315,5 +316,6 @@ Para contribuir:
 Este proyecto está bajo la licencia MIT. Ver `LICENSE` para más detalles.
 
 ### 🎮 ¡Listo para crear contenido increíble!
+
 
 Esta aplicación integra las tecnologías más avanzadas de IA para ofrecer capacidades profesionales de edición de imágenes, diseñada específicamente para desarrolladores de videojuegos y concept artists que necesitan generar contenido de alta calidad de manera eficiente.
