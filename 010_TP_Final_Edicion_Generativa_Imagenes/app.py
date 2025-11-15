@@ -255,7 +255,7 @@ class ImageEditingApp:
         """Analizar imagen usando Gemini 2.0 con análisis comparativo entre original y procesada"""
         try:
             # Verificar si hay API key configurada
-            api_key = os.getenv('GOOGLE_API_KEY')
+            api_key = st.secrets["general"]["GEMINI_API_KEY"]
             if not api_key:
                 st.error("❌ No se encontró API key de Gemini configurada")
                 return {"error": "API key no configurada"}
@@ -762,4 +762,5 @@ def main():
     app.run()
 
 if __name__ == "__main__":
+
     main()
