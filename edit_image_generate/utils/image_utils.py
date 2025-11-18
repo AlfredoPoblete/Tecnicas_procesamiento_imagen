@@ -238,15 +238,7 @@ class ImageProcessor:
             'guidance_scale': 7.5
         }
         
-        if method == 'inpainting':
-            if area > 512*512:
-                base_params['num_inference_steps'] = 40
-                base_params['guidance_scale'] = 8.0
-            else:
-                base_params['num_inference_steps'] = 25
-                base_params['guidance_scale'] = 7.0
-        
-        elif method == 'style_transfer':
+        if method == 'style_transfer':
             base_params['strength'] = 0.6
             base_params['num_inference_steps'] = 35
         
