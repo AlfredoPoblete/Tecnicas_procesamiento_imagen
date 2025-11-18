@@ -568,14 +568,29 @@ class ImageEditingApp:
                     "background replacement": "background_replacement",
                     "composición inteligente": "intelligent_composition"
                 }
-                
+
                 method_key = processing_method.split(' (')[0].lower()
                 if method_key in method_mapping:
                     method_key = method_mapping[method_key]
                 else:
                     method_key = method_key.replace(' ', '_')
-                
-                result, metadata = self.process_image(st.session_state['original_image'], method_key, **params)
+
+                # Depuración: mostrar método y parámetros antes de procesar
+                try:
+                    st.info(f"Procesando con método: {method_key}")
+                    st.write({"method_key": method_key, "params_preview": {k: (v if not hasattr(v, 'read') else 'file') for k, v in params.items()}})
+                except Exception:
+                    # Fallback silencioso si st.write falla por valores complejos
+                    pass
+
+                try:
+                    result, metadata = self.process_image(st.session_state['original_image'], method_key, **params)
+                except Exception as e:
+                    # Mostrar excepción para diagnóstico
+                    import traceback
+                    traceback.print_exc()
+                    st.error(f"Excepción durante el llamado al procesador: {e}")
+                    result, metadata = None, {}
                 
                 if result:
                     st.session_state['processed_image'] = result
