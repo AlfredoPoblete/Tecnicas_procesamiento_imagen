@@ -10,12 +10,8 @@ import requests
 import torch
 import numpy as np
 from PIL import Image, ImageDraw
-from diffusers import (
-    StableDiffusionImg2ImgPipeline,
-    StableDiffusionUpscalePipeline,
-    ControlNetModel,
-    StableDiffusionControlNetPipeline
-)
+from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img import StableDiffusionImg2ImgPipeline
+from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_upscale import StableDiffusionUpscalePipeline
 from typing import Optional, Tuple, Dict, Any
 import warnings
 warnings.filterwarnings("ignore")
@@ -484,23 +480,41 @@ class DiffusionProcessor:
             raise Exception(f"Error en intelligent composition: {str(e)}")
     
     def process(self, image: Image.Image, method: str, **kwargs) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
-        """Método principal de procesamiento con optimizaciones (SIN INPAINTING)"""
+        """Método principal de procesamiento con optimizaciones (SIN INPAINTING) - VERSIÓN CORREGIDA"""
+        original_size = None
+        optimized_size = None
+        
         try:
             start_time = time.time()
+            
+            # Validar entrada
+            if image is None:
+                raise ValueError("La imagen no puede ser None")
+            
+            if not method or method.strip() == "":
+                raise ValueError("El método de procesamiento no puede estar vacío")
             
             # Optimización: Redimensionar imagen para mejorar velocidad
             original_size = image.size
             image = self._optimize_image_size(image)
             optimized_size = image.size
             
-            print(f"Iniciando procesamiento con metodo: {method} (SIN INPAINTING)")
-            print(f"Tamano original: {original_size}, Optimizado: {optimized_size}")
+            print(f"🚀 Iniciando procesamiento con método: {method} (SIN INPAINTING)")
+            print(f"📐 Tamaño original: {original_size}, Optimizado: {optimized_size}")
+            
+            # Validar método antes de continuar
+            supported_methods = ["outpainting", "style_transfer", "background_replacement", "intelligent_composition"]
+            if method not in supported_methods:
+                raise ValueError(f"Método no soportado: {method}. Métodos disponibles: {supported_methods}")
             
             # Remover parámetros que no son argumentos del método específico
             filtered_kwargs = {k: v for k, v in kwargs.items()
                              if k not in ['prompt', 'style_prompt', 'context_prompt', 'background_prompt', 'elements_prompt']}
             
             # Procesar según método (SIN INPAINTING - cada uno usa carga lazy de modelos)
+            result = None
+            metadata = {}
+            
             if method == "outpainting":
                 extension_factor = kwargs.get('extension_factor', 1.5)
                 prompt = kwargs.get('prompt', 'extended natural landscape seamlessly')
@@ -521,10 +535,11 @@ class DiffusionProcessor:
             elif method == "intelligent_composition":
                 elements_prompt = kwargs.get('elements_prompt', 'harmonious composition')
                 result, metadata = self.intelligent_composition(image, elements_prompt, **filtered_kwargs)
-                
-            else:
-                raise ValueError(f"Metodo no soportado: {method} (SIN INPAINTING)")
             
+            # Validar que tenemos un resultado válido
+            if result is None:
+                raise Exception(f"No se generó resultado para el método: {method}")
+                
             # Añadir métricas de optimización
             end_time = time.time()
             processing_time = end_time - start_time
@@ -535,22 +550,51 @@ class DiffusionProcessor:
                 'optimized_size': optimized_size,
                 'memory_optimized': original_size != optimized_size,
                 'lazy_loading': True,
-                'no_inpainting': True  # Flag para indicar versión sin inpainting
+                'no_inpainting': True,  # Flag para indicar versión sin inpainting
+                'method_processed': method
             })
             
-            print(f"Procesamiento completado en {processing_time:.2f}s (SIN INPAINTING)")
+            print(f"✅ Procesamiento completado en {processing_time:.2f}s (SIN INPAINTING)")
             return result, metadata
                 
         except Exception as e:
-            print(f"Error procesando imagen: {str(e)}")
+            error_msg = f"Error procesando imagen con método {method}: {str(e)}"
+            print(f"❌ {error_msg}")
+            
             # Fallback local: generar una versión simple simulada del resultado
             try:
+                print("🔄 Intentando fallback local...")
+                
+                # Usar valores por defecto si no se definieron
+                if original_size is None:
+                    original_size = (512, 512)
+                if optimized_size is None:
+                    optimized_size = (512, 512)
+                
+                # Asegurar que tenemos una imagen válida
+                if image is None:
+                    image = Image.new('RGB', original_size, (128, 128, 128))
+                
                 fallback_img, fallback_meta = self._local_fallback(image, method, kwargs)
-                fallback_meta.update({'processing_time': '0.00s', 'original_size': original_size, 'optimized_size': optimized_size, 'fallback_used': True})
+                fallback_meta.update({
+                    'processing_time': '0.00s', 
+                    'original_size': original_size, 
+                    'optimized_size': optimized_size, 
+                    'fallback_used': True,
+                    'original_error': str(e),
+                    'method_processed': method
+                })
+                print(f"✅ Fallback completado para método: {method}")
                 return fallback_img, fallback_meta
             except Exception as e2:
-                print(f"Error en fallback local: {e2}")
-                return None, {"error": str(e)}
+                print(f"❌ Error en fallback local: {str(e2)}")
+                return None, {
+                    "error": error_msg, 
+                    "fallback_error": str(e2),
+                    "method": method,
+                    "original_size": original_size or 'unknown',
+                    "optimized_size": optimized_size or 'unknown'
+                }
     
     def _create_optimized_mask(self, image: Image.Image, kwargs: Dict, method_type: str) -> Image.Image:
         """Crear máscara optimizada según el tamaño de la imagen actual (SIN INPAINTTING)"""

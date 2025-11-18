@@ -278,17 +278,36 @@ class ImageEditingApp:
             return None
     
     def process_image(self, image: Image.Image, method: str, **kwargs) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
-        """Procesar imagen usando modelos de difusión optimizados"""
+        """Procesar imagen usando modelos de difusión optimizados con mejor manejo de errores"""
         try:
+            # Mostrar progreso detallado
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            status_text.text('Inicializando procesador...')
+            progress_bar.progress(10)
+            
             with st.spinner(f'🚀 Procesando imagen con {method}...'):
+                # Llamar al procesamiento con mejor manejo de errores
                 result, metadata = self.diffusion_processor.process(
                     image=image,
                     method=method,
                     **kwargs
                 )
+                
+                progress_bar.progress(100)
+                status_text.text('¡Procesamiento completado!')
+                
+            # Verificar si se usó fallback
+            if metadata.get('fallback_used', False):
+                st.warning("⚠️ Se utilizó procesamiento local (modelos no disponibles)")
+                st.info("💡 Para mejor calidad, configure HuggingFace API token en variables de entorno")
+            
             return result, metadata
+            
         except Exception as e:
             st.error(f"Error en el procesamiento: {str(e)}")
+            st.info("💡 Si el problema persiste, verifique la configuración de modelos y dependencias")
             return None, {}
     
     def analyze_image(self, image: Image.Image, analysis_type: str = "comparison_analysis") -> Dict[str, Any]:
@@ -598,8 +617,9 @@ class ImageEditingApp:
         return img_str
     
     def render_processing_section(self):
-        """Renderizar sección de procesamiento (sin Inpainting)"""
+        """Renderizar sección de procesamiento optimizada"""
         if 'original_image' not in st.session_state:
+            st.warning("⚠️ Primero sube una imagen para procesar")
             return
         
         st.markdown('<h3 class="section-header">🎯 Procesamiento</h3>', unsafe_allow_html=True)
@@ -607,35 +627,111 @@ class ImageEditingApp:
         col1, col2 = st.columns([2, 1])
         
         with col1:
+            # Verificar estado del sistema
+            system_status = self._check_system_status()
+            
+            if not system_status['ready']:
+                st.error(f"❌ {system_status['message']}")
+                st.info("💡 Soluciones disponibles:")
+                for solution in system_status.get('solutions', []):
+                    st.write(f"• {solution}")
+                return
+            
+            # Mostrar estado del sistema
+            if system_status.get('warnings'):
+                for warning in system_status['warnings']:
+                    st.warning(f"⚠️ {warning}")
+            
             # Selector de método (sin Inpainting) - usar las claves definidas en UIHelper
             processing_method = st.selectbox(
                 "Selecciona el método de procesamiento",
                 list(self.ui_helper.processing_methods.keys()),
-                key="method_selector"
+                key="method_selector",
+                help="Elige la técnica de procesamiento que deseas aplicar"
             )
             
             # Parámetros según el método
-            params = self.ui_helper.get_processing_params(processing_method)
+            with st.expander("⚙️ Configuración avanzada", expanded=False):
+                params = self.ui_helper.get_processing_params(processing_method)
             
-            # Botón de procesamiento
-            if st.button("🚀 Procesar Imagen", key="process_button", type="primary"):
+            # Botón de procesamiento con mejor feedback
+            if st.button("🚀 Procesar Imagen", key="process_button", type="primary", use_container_width=True):
                 # Obtener el método interno configurado en UIHelper
                 method_key = self.ui_helper.processing_methods[processing_method]['key']
                 
-                result, metadata = self.process_image(st.session_state['original_image'], method_key, **params)
+                # Crear contenedor para resultados
+                result_container = st.container()
                 
-                if result:
-                    st.session_state['processed_image'] = result
-                    st.session_state['processing_metadata'] = metadata
-                    st.success("✅ Imagen procesada exitosamente")
+                with result_container:
+                    result, metadata = self.process_image(st.session_state['original_image'], method_key, **params)
                     
-                    # Mostrar métricas si están disponibles
-                    if 'processing_time' in metadata:
-                        st.info(f"⏱️ Tiempo de procesamiento: {metadata['processing_time']}")
+                    if result:
+                        st.session_state['processed_image'] = result
+                        st.session_state['processing_metadata'] = metadata
+                        
+                        # Mostrar métricas detalladas
+                        if 'processing_time' in metadata:
+                            st.success(f"✅ Imagen procesada exitosamente en {metadata['processing_time']}")
+                        
+                        if metadata.get('fallback_used', False):
+                            st.info("🔄 Procesamiento completado con fallback local")
+                        
+                        # Mostrar detalles técnicos
+                        with st.expander("📊 Detalles técnicos", expanded=False):
+                            col_a, col_b = st.columns(2)
+                            with col_a:
+                                st.metric("Tiempo", metadata.get('processing_time', 'N/A'))
+                                st.metric("Tamaño original", f"{metadata.get('original_size', 'N/A')}")
+                            with col_b:
+                                st.metric("Optimizado", metadata.get('optimized_size', 'N/A'))
+                                st.metric("Dispositivo", metadata.get('device', 'N/A'))
+                    else:
+                        st.error("❌ No se pudo procesar la imagen. Verifica los parámetros e intenta de nuevo.")
                 
         with col2:
-            # Imagen original (sin texto adicional)
-            st.image(st.session_state['original_image'], width=500)
+            # Información de la imagen y previsualización
+            st.markdown("### 🖼️ Imagen Original")
+            st.image(st.session_state['original_image'], width=400)
+            
+            # Información adicional
+            if 'processed_image' in st.session_state:
+                st.markdown("### ✨ Imagen Procesada")
+                st.image(st.session_state['processed_image'], width=400)
+    
+    def _check_system_status(self) -> Dict[str, Any]:
+        """Verificar estado del sistema y mostrar advertencias apropiadas"""
+        status = {
+            'ready': True,
+            'message': '',
+            'warnings': [],
+            'solutions': []
+        }
+        
+        try:
+            # Verificar dispositivo
+            device = self.diffusion_processor.device
+            if device == 'cpu':
+                status['warnings'].append("Ejecutándose en CPU - el procesamiento será más lento")
+                status['solutions'].append("Para mejor rendimiento, instale CUDA/PyTorch con GPU")
+            
+            # Verificar si hay modelos cargados
+            loaded_models = len(self.diffusion_processor.pipes)
+            if loaded_models == 0:
+                status['warnings'].append("Modelos no pre-cargados - se usará procesamiento local")
+                status['solutions'].append("Para modelos completos, configure HUGGINGFACE_API_TOKEN")
+            
+            # Verificar API de Gemini
+            api_key = os.getenv('GOOGLE_API_KEY')
+            if not api_key:
+                status['warnings'].append("API key de Gemini no configurada - análisis limitado")
+                status['solutions'].append("Configure GOOGLE_API_KEY en archivo .env para análisis completo")
+                
+        except Exception as e:
+            status['ready'] = False
+            status['message'] = f"Error verificando sistema: {str(e)}"
+            status['solutions'].append("Verifique la instalación de dependencias")
+        
+        return status
     
     def render_comparison_section(self):
         """Renderizar sección de comparación con redimensionamiento automático"""
