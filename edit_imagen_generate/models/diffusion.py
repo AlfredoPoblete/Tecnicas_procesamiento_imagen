@@ -1,91 +1,63 @@
 """
-Módulo de Procesamiento con Modelos de Difusión - VERSIÓN OPTIMIZADA PARA STREAMLIT
+Módulo de Procesamiento con Modelos de Difusión - VERSIÓN OPTIMIZADA
 """
 
-import os
 import torch
 import numpy as np
 import time
-import requests
-import json
-import base64
-from io import BytesIO
 from PIL import Image, ImageDraw
+from diffusers import (
+    StableDiffusionInpaintPipeline,
+    StableDiffusionImg2ImgPipeline,
+    StableDiffusionUpscalePipeline,
+    ControlNetModel,
+    StableDiffusionControlNetPipeline
+)
 from typing import Optional, Tuple, Dict, Any
 import warnings
 warnings.filterwarnings("ignore")
 
-# Imports de diffusers actualizados
-try:
-    from diffusers import StableDiffusionInpaintPipeline, StableDiffusionImg2ImgPipeline
-except ImportError:
-    # Fallback para versiones antiguas
-    from diffusers.pipelines.stable_diffusion import StableDiffusionInpaintPipeline, StableDiffusionImg2ImgPipeline
-
 class DiffusionProcessor:
-    """Procesador principal para modelos de difusión OPTIMIZADO para Streamlit"""
+    """Procesador principal para modelos de difusión - CARGA LAZY REAL"""
     
     def __init__(self):
-        # Verificar si usar API de Hugging Face
-        self.use_hf_api = os.getenv('USE_HF_API', 'false').lower() == 'true'
-        self.hf_token = os.getenv('HUGGINGFACE_API_TOKEN')
-        
         # Configurar optimizaciones de GPU primero
         self._setup_gpu_optimizations()
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.pipes = {}  # Diccionario vacío - Carga lazy
+        self.pipes = {}  # Diccionario vacío - Carga lazy REAL
+        self.initialized = False  # Bandera de inicialización
         
-        # Configuración de modelos OPTIMIZADA para Streamlit
-        if self.use_hf_api and self.hf_token:
-            # Modelos ligeros vía API de Hugging Face
-            self.model_configs = {
-                'inpainting': {
-                    'model_name': 'diffusers/stable-diffusion-inpainting-0.1',
-                    'pipeline_class': None,  # Se usará API REST
-                    'api_endpoint': f'https://api-inference.huggingface.co/models/diffusers/stable-diffusion-inpainting-0.1'
-                },
-                'img2img': {
-                    'model_name': 'runwayml/stable-diffusion-v1-5',
-                    'pipeline_class': StableDiffusionImg2ImgPipeline,
-                    'api_endpoint': f'https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5'
-                },
-                'style_transfer': {
-                    'model_name': 'prompthero/openjourney',
-                    'pipeline_class': StableDiffusionImg2ImgPipeline,
-                    'api_endpoint': f'https://api-inference.huggingface.co/models/prompthero/openjourney'
-                }
+        # Configuración de modelos para carga lazy
+        self.model_configs = {
+            'inpainting': {
+                'model_name': 'runwayml/stable-diffusion-inpainting',
+                'pipeline_class': StableDiffusionInpaintPipeline
+            },
+            'img2img': {
+                'model_name': 'runwayml/stable-diffusion-v1-5',
+                'pipeline_class': StableDiffusionImg2ImgPipeline
+            },
+            'upscale': {
+                'model_name': 'stabilityai/stable-diffusion-x4-upscaler',
+                'pipeline_class': StableDiffusionUpscalePipeline
             }
-            print("🚀 Usando API de Hugging Face para modelos ligeros")
-        else:
-            # Modelos locales optimizados (carga lazy)
-            self.model_configs = {
-                'inpainting': {
-                    'model_name': 'runwayml/stable-diffusion-inpainting',
-                    'pipeline_class': StableDiffusionInpaintPipeline,
-                    'optimized': True,
-                    'variant': 'fp16'  # Usar variante de precisión reducida
-                },
-                'img2img': {
-                    'model_name': 'runwayml/stable-diffusion-v1-5',
-                    'pipeline_class': StableDiffusionImg2ImgPipeline,
-                    'optimized': True,
-                    'variant': 'fp16'
-                },
-                'style_transfer': {
-                    'model_name': 'prompthero/openjourney',
-                    'pipeline_class': StableDiffusionImg2ImgPipeline,
-                    'optimized': True,
-                    'variant': 'fp16'
-                }
-            }
-            print("⚡ Usando modelos locales optimizados")
+        }
         
-        print(f"DiffusionProcessor inicializado - Dispositivo: {self.device}")
+        print("DiffusionProcessor creado - Inicialización lazy activada")
+    
+    def _initialize(self):
+        """Inicialización diferida - solo se ejecuta cuando se necesita"""
+        if self.initialized:
+            return
+            
+        print(f"Inicializando DiffusionProcessor en dispositivo: {self.device}")
         if self.device == 'cuda':
             print("GPU disponible - Optimizaciones activadas")
         else:
-            print("CPU solamente - Modo de bajo consumo activado")
+            print("CPU solamente - El procesamiento sera mas lento")
+            
+        self.initialized = True
         
     def _setup_gpu_optimizations(self):
         """Configurar optimizaciones de GPU para mayor velocidad"""
@@ -115,31 +87,17 @@ class DiffusionProcessor:
             
         try:
             config = self.model_configs[model_key]
-            
-            # Si usar API de Hugging Face, no cargar modelo local
-            if self.use_hf_api and 'api_endpoint' in config:
-                print(f"Modelo {model_key} usará API de Hugging Face")
-                return None  # No necesitamos cargar el modelo localmente
-            
             model_name = config['model_name']
             pipeline_class = config['pipeline_class']
             
             print(f"Cargando modelo {model_key}: {model_name}")
             
-            # Configuración optimizada para modelos locales
-            load_kwargs = {
-                'torch_dtype': self._get_device_dtype(),
-                'safety_checker': None,
-                'resume_download': True,
-            }
-            
-            # Usar variante optimizada si está disponible
-            if 'variant' in config:
-                load_kwargs['variant'] = config['variant']
-            
             pipe = pipeline_class.from_pretrained(
                 model_name,
-                **load_kwargs
+                torch_dtype=self._get_device_dtype(),
+                safety_checker=None,
+                resume_download=True,
+                cache_dir=None
             )
             
             # Mover al dispositivo de forma segura
@@ -160,6 +118,7 @@ class DiffusionProcessor:
     
     def _get_model(self, model_key: str):
         """Obtener modelo - cargar si no existe (carga lazy)"""
+        self._initialize()  # Inicializar solo cuando se necesita
         if model_key not in self.pipes:
             self.pipes[model_key] = self._load_single_model(model_key)
         return self.pipes[model_key]
@@ -169,80 +128,24 @@ class DiffusionProcessor:
         width, height = image.size
         
         # Si la imagen es muy grande, redimensionar para mejorar velocidad
-        if max(width, height) > 256:
+        if max(width, height) > 512:
             # Mantener aspecto ratio
             if width > height:
-                new_width = 256
-                new_height = int((height * 256) / width)
+                new_width = 512
+                new_height = int((height * 512) / width)
             else:
-                new_height = 256
-                new_width = int((width * 256) / height)
+                new_height = 512
+                new_width = int((width * 512) / height)
             
-            print(f"Redimensionando imagen de {width}x{height} a {new_width}x{new_height} para optimizar velocidad en Streamlit")
+            print(f"Redimensionando imagen de {width}x{height} a {new_width}x{new_height} para optimizar velocidad")
             return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
         
         # Si la imagen es muy pequeña, mantener para preservar calidad
-        elif min(width, height) < 128:
+        elif min(width, height) < 256:
             print(f"Imagen pequena ({width}x{height}) - manteniendo tamano para preservar calidad")
             return image
         
         return image
-    
-    def _encode_image_for_hf_api(self, image: Image.Image) -> str:
-        """Codificar imagen para envío a API de Hugging Face"""
-        buffer = BytesIO()
-        # Redimensionar primero para reducir tamaño
-        image_resized = self._optimize_image_size(image)
-        image_resized.save(buffer, format='PNG')
-        image_data = buffer.getvalue()
-        return base64.b64encode(image_data).decode('utf-8')
-    
-    def _encode_mask_for_hf_api(self, mask: Image.Image) -> str:
-        """Codificar máscara para envío a API de Hugging Face"""
-        buffer = BytesIO()
-        mask.save(buffer, format='PNG')
-        image_data = buffer.getvalue()
-        return base64.b64encode(image_data).decode('utf-8')
-    
-    def _call_hf_api(self, model_key: str, payload: Dict[str, Any]) -> Optional[Image.Image]:
-        """Llamar a la API de Hugging Face para procesamiento"""
-        if not self.use_hf_api or not self.hf_token:
-            return None
-            
-        try:
-            config = self.model_configs.get(model_key, {})
-            if 'api_endpoint' not in config:
-                return None
-                
-            endpoint = config['api_endpoint']
-            
-            # Headers para Hugging Face
-            headers = {
-                "Authorization": f"Bearer {self.hf_token}",
-                "Content-Type": "application/json",
-            }
-            
-            print(f"Llamando API de Hugging Face: {endpoint}")
-            
-            response = requests.post(
-                endpoint,
-                headers=headers,
-                json=payload,
-                timeout=120  # Timeout más largo para modelos
-            )
-            
-            if response.status_code == 200:
-                # La respuesta es una imagen
-                image = Image.open(BytesIO(response.content))
-                return image.convert('RGB')
-            else:
-                print(f"Error en API de Hugging Face: {response.status_code}")
-                print(f"Response: {response.text}")
-                return None
-                
-        except Exception as e:
-            print(f"Error llamando API de Hugging Face: {str(e)}")
-            return None
     
     def create_rectangular_mask(self, width: int, height: int, x: int, y: int,
                                rect_width: int, rect_height: int) -> Image.Image:
@@ -262,47 +165,15 @@ class DiffusionProcessor:
     
     def inpainting(self, image: Image.Image, mask: Image.Image,
                   prompt: str, **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
-        """Realizar inpainting en la imagen con soporte para API de Hugging Face"""
+        """Realizar inpainting en la imagen"""
         try:
-            # Parámetros por defecto optimizados para Streamlit
-            num_inference_steps = kwargs.get('num_inference_steps', 20)  # Más agresivo para velocidad
-            guidance_scale = kwargs.get('guidance_scale', 6.5)  # Reducido para velocidad
-            
-            # Intentar usar API de Hugging Face primero si está configurada
-            if self.use_hf_api and self.hf_token:
-                config = self.model_configs.get('inpainting', {})
-                if 'api_endpoint' in config:
-                    print("🚀 Usando API de Hugging Face para inpainting")
-                    
-                    # Preparar payload para API
-                    payload = {
-                        "inputs": {
-                            "prompt": prompt,
-                            "image": self._encode_image_for_hf_api(image),
-                            "mask_image": self._encode_mask_for_hf_api(mask)
-                        },
-                        "parameters": {
-                            "num_inference_steps": min(num_inference_steps, 20),  # Límite API
-                            "guidance_scale": guidance_scale
-                        }
-                    }
-                    
-                    result = self._call_hf_api('inpainting', payload)
-                    if result:
-                        metadata = {
-                            'method': 'inpainting',
-                            'prompt': prompt,
-                            'steps': num_inference_steps,
-                            'guidance_scale': guidance_scale,
-                            'device': 'huggingface_api',
-                            'optimized': True,
-                            'api_processed': True
-                        }
-                        return result, metadata
-            
-            # Fallback a modelo local
             pipe = self._get_model('inpainting')  # Carga lazy
             
+            # Parámetros por defecto optimizados
+            num_inference_steps = kwargs.get('num_inference_steps', 25)  # Reducido de 30
+            guidance_scale = kwargs.get('guidance_scale', 7.0)  # Reducido de 7.5
+            
+            # Procesar
             result = pipe(
                 prompt=prompt,
                 image=image,
@@ -405,48 +276,13 @@ class DiffusionProcessor:
     
     def style_transfer(self, image: Image.Image, style_prompt: str,
                       **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
-        """Transferir estilo artístico con soporte para API de Hugging Face"""
+        """Transferir estilo artístico"""
         try:
-            # Parámetros optimizados para velocidad en Streamlit
-            strength = kwargs.get('strength', 0.4)  # Más agresivo para velocidad
-            num_inference_steps = kwargs.get('num_inference_steps', 15)  # Muy reducido
-            guidance_scale = kwargs.get('guidance_scale', 6.0)  # Reducido para velocidad
-            
-            # Intentar usar API de Hugging Face primero si está configurada
-            if self.use_hf_api and self.hf_token:
-                config = self.model_configs.get('style_transfer', {})
-                if 'api_endpoint' in config:
-                    print("🎨 Usando API de Hugging Face para style transfer")
-                    
-                    # Preparar payload para API
-                    payload = {
-                        "inputs": {
-                            "prompt": style_prompt,
-                            "image": self._encode_image_for_hf_api(image)
-                        },
-                        "parameters": {
-                            "num_inference_steps": min(num_inference_steps, 15),  # Límite API
-                            "guidance_scale": guidance_scale,
-                            "strength": strength
-                        }
-                    }
-                    
-                    result = self._call_hf_api('style_transfer', payload)
-                    if result:
-                        metadata = {
-                            'method': 'style_transfer',
-                            'prompt': style_prompt,
-                            'strength': strength,
-                            'steps': num_inference_steps,
-                            'guidance_scale': guidance_scale,
-                            'device': 'huggingface_api',
-                            'optimized': True,
-                            'api_processed': True
-                        }
-                        return result, metadata
-            
-            # Fallback a modelo local
             pipe = self._get_model('img2img')  # Carga lazy
+            
+            strength = kwargs.get('strength', 0.5)  # Reducido de 0.6
+            num_inference_steps = kwargs.get('num_inference_steps', 20)  # Reducido de 30
+            guidance_scale = kwargs.get('guidance_scale', 6.5)  # Reducido de 7.5
             
             result = pipe(
                 prompt=style_prompt,
@@ -577,48 +413,13 @@ class DiffusionProcessor:
     
     def intelligent_composition(self, image: Image.Image, elements_prompt: str,
                               **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
-        """Composición inteligente de elementos con optimizaciones para Streamlit"""
+        """Composición inteligente de elementos"""
         try:
-            # Parámetros muy optimizados para velocidad
-            strength = kwargs.get('strength', 0.3)  # Muy reducido para velocidad
-            num_inference_steps = kwargs.get('num_inference_steps', 15)  # Muy reducido
-            guidance_scale = kwargs.get('guidance_scale', 6.5)  # Reducido para velocidad
-            
-            # Intentar usar API de Hugging Face primero si está configurada
-            if self.use_hf_api and self.hf_token:
-                config = self.model_configs.get('img2img', {})
-                if 'api_endpoint' in config:
-                    print("🧩 Usando API de Hugging Face para composición inteligente")
-                    
-                    # Preparar payload para API
-                    payload = {
-                        "inputs": {
-                            "prompt": elements_prompt,
-                            "image": self._encode_image_for_hf_api(image)
-                        },
-                        "parameters": {
-                            "num_inference_steps": min(num_inference_steps, 15),  # Límite API
-                            "guidance_scale": guidance_scale,
-                            "strength": strength
-                        }
-                    }
-                    
-                    result = self._call_hf_api('img2img', payload)
-                    if result:
-                        metadata = {
-                            'method': 'intelligent_composition',
-                            'prompt': elements_prompt,
-                            'strength': strength,
-                            'steps': num_inference_steps,
-                            'guidance_scale': guidance_scale,
-                            'device': 'huggingface_api',
-                            'optimized': True,
-                            'api_processed': True
-                        }
-                        return result, metadata
-            
-            # Fallback a modelo local
             pipe = self._get_model('img2img')  # Carga lazy
+            
+            strength = kwargs.get('strength', 0.4)  # Reducido de 0.5
+            num_inference_steps = kwargs.get('num_inference_steps', 25)  # Reducido de 40
+            guidance_scale = kwargs.get('guidance_scale', 7.0)  # Reducido de 8.0
             
             result = pipe(
                 prompt=elements_prompt,
@@ -772,5 +573,6 @@ class DiffusionProcessor:
             'models_loaded': list(self.pipes.keys()),
             'cuda_available': torch.cuda.is_available(),
             'lazy_loading_enabled': True,
+            'initialized': self.initialized,
             'gpu_optimizations': self.device == 'cuda'
         }

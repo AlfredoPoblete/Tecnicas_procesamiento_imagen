@@ -1,48 +1,50 @@
-# Dependencias optimizadas para Streamlit Cloud
-# Aplicación de Edición Generativa de Imágenes
+# Aplicación MVP: Edición Generativa de Imágenes con Análisis Inteligente
+# Procesamiento Digital de Imágenes - IFTS24
 
-# Core de Streamlit
+# Framework web
 streamlit>=1.28.0
+
+# Modelos de difusión
+diffusers>=0.21.0
+transformers>=4.35.0
+accelerate>=0.24.0
+torch>=2.0.0
+torchvision>=0.15.0
 
 # Procesamiento de imágenes
 Pillow>=10.0.0
+opencv-python>=4.8.0
+scikit-image>=0.21.0
 
-# Soporte numérico
+# Análisis numérico
 numpy>=1.24.0
+scipy>=1.11.0
 
-# Opcional: PyTorch y diffusers (si están disponibles en Streamlit Cloud)
-# torch>=2.0.0
-# diffusers>=0.21.0
-# transformers>=4.30.0
+# API de Gemini (opcional, para análisis avanzado)
+google-generativeai>=0.3.0
+google-genai>=0.0.1
 
-# Utilidades de Python
-python-dotenv>=1.0.0
+# Métricas de imagen
+scikit-learn>=1.3.0
+lpips>=0.1.4
 
-# Logging (incluido en Python, pero para claridad)
-# logging (built-in)
+# Utilidades
+requests>=2.31.0
+python-dotenv>=0.21.0
+pyyaml>=6.0.0
+tqdm>=4.66.0
 
-# Compatibilidad multiplataforma
-# pathlib (built-in)
-# typing (built-in)
+# Métricas de calidad de imagen
+seaborn>=0.12.0
+matplotlib>=3.7.0
 
-# Configuración opcional para variables de entorno
-# os (built-in)
-# json (built-in)
-# time (built-in)
-# datetime (built-in)
+# Para manejo de archivos grandes
+imageio>=2.31.0
 
-# Análisis básico (incluido con PIL/numpy)
-# PIL.Image (Pillow)
-# numpy (ya incluido)
+# Dependencias para Windows (opcional)
+# pywin32>=306; sys_platform == "win32"
 
-# Notas para Streamlit Cloud:
-# 1. Los módulos heavy como diffusers y torch son opcionales
-# 2. La aplicación funciona en modo simulado sin ellos
-# 3. Para usar modelos reales, descomenta las líneas de torch/diffusers
-# 4. Streamlit Cloud debe tener acceso a estos módulos
-
-# Para deployment local completo:
-# pip install -r requirements.txt
-
-# Para deployment en Streamlit Cloud:
-# Descomenta las líneas de torch y diffusers si necesitas modelos reales
+# Dependencias de desarrollo (opcional)
+# pytest>=7.0.0
+# black>=23.0.0
+# flake8>=6.0.0
