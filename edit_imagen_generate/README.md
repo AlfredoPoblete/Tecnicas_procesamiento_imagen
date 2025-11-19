@@ -7,6 +7,15 @@
 
 ---
 
+
+> **🌟 VERSIÓN CLOUD-OPTIMIZADA**  
+> Esta aplicación ha sido migrada para funcionar perfectamente en **Streamlit Cloud** usando **HuggingFace Inference API**.  
+> ✅ Sin modelos pesados | ✅ Sin GPU requerida | ✅ Deploy instantáneo  
+> 📖 Ver [MIGRACION_CLOUD.md](MIGRACION_CLOUD.md) para detalles técnicos completos.
+
+---
+
+
 # 🎨 MVP: Edición Generativa de Imágenes con Análisis Inteligente
 
 **Procesamiento Digital de Imágenes - IFTS24**
@@ -61,13 +70,18 @@ Una aplicación avanzada que integra modelos de difusión de última generación
 
 ## 🛠️ Instalación y Configuración
 
+> **⚠️ IMPORTANTE**: Esta aplicación ahora usa **HuggingFace Inference API** en lugar de modelos locales.  
+> ✅ **Funciona perfectamente en Streamlit Cloud** sin necesidad de GPU ni modelos pesados.  
+> 📖 Ver [MIGRACION_CLOUD.md](MIGRACION_CLOUD.md) para detalles técnicos completos.
+
 ### Prerrequisitos
 - Python 3.8+
-- GPU recomendada (NVIDIA CUDA compatible)
-- 8GB+ RAM
-- 10GB+ espacio libre en disco
+- **NO requiere GPU** (usa APIs en la nube)
+- ~500 MB RAM
+- ~200 MB espacio libre en disco
+- Conexión a Internet
 
-### Instalación
+### Instalación Rápida
 
 1. **Clonar el repositorio**
 ```bash
@@ -81,31 +95,47 @@ python -m venv venv
 source venv/bin/activate  # En Windows: venv\Scripts\activate
 ```
 
-3. **Instalar dependencias**
+3. **Instalar dependencias (solo ~100 MB)**
 ```bash
 pip install -r requirements.txt
 ```
 
-4. **Configurar variables de entorno (opcional)**
+4. **Configurar API Keys (REQUERIDO)**
 ```bash
-# Crear archivo .env
-GOOGLE_API_KEY=tu_api_key_aqui
+# Copiar archivo de ejemplo
+cp .env.example .env
+
+# Editar .env con tus API keys:
+# HUGGINGFACE_API_KEY=hf_tu_token_aqui
+# GOOGLE_API_KEY=tu_google_api_key_aqui
 ```
 
-### Configuración de GPU (Recomendado)
+### Obtener API Keys (Gratis)
 
-**Para NVIDIA GPUs:**
-```bash
-# Instalar CUDA Toolkit 11.8+ y PyTorch compatible
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-```
+**HuggingFace API Key** (para generación de imágenes):
+1. Ve a [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+2. Crea un nuevo token (tipo: Read)
+3. Copia el token y agrégalo a tu archivo `.env`
 
-**Para verificar GPU:**
-```python
-import torch
-print("CUDA disponible:", torch.cuda.is_available())
-print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+**Google Gemini API Key** (para análisis de imágenes):
+1. Ve a [https://makersuite.google.com/app/apikey](https://makersuite.google.com/app/apikey)
+2. Crea una nueva API key
+3. Copia la key y agrégala a tu archivo `.env`
+
+### Despliegue en Streamlit Cloud
+
+Para desplegar en [Streamlit Cloud](https://share.streamlit.io/):
+
+1. **Sube tu código a GitHub**
+2. **Conecta con Streamlit Cloud**
+3. **Configura los Secrets** en Settings → Secrets:
+```toml
+HUGGINGFACE_API_KEY = "hf_tu_token_aqui"
+GOOGLE_API_KEY = "tu_google_api_key_aqui"
 ```
+4. **Deploy** - ¡La app estará lista en menos de 1 minuto!
+
+📖 **Guía completa de migración**: Ver [MIGRACION_CLOUD.md](MIGRACION_CLOUD.md)
 
 ## 🚀 Uso de la Aplicación
 
@@ -167,21 +197,24 @@ params = {
 
 ## 🔧 APIs y Modelos Utilizados
 
-### Modelos de Difusión
-- **Stable Diffusion Inpainting**: `runwayml/stable-diffusion-inpainting`
+### 🌐 Procesamiento en la Nube (HuggingFace Inference API)
+- **Stable Diffusion Inpainting**: `stabilityai/stable-diffusion-2-inpainting`
 - **Stable Diffusion v1.5**: `runwayml/stable-diffusion-v1-5` 
-- **Stable Diffusion Upscaler**: `stabilityai/stable-diffusion-x4-upscaler`
+- **Sin descarga de modelos**: Todo se procesa en servidores de HuggingFace
+- **Sin GPU local requerida**: Procesamiento 100% en la nube
 
-### Análisis Visual
+### 🧠 Análisis Visual (Google Gemini)
 - **Gemini 2.0 Flash**: Análisis multimodal avanzado
 - **Comprensión espacial**: Detección de objetos y bounding boxes
 - **Razonamiento visual**: Descripción y comparación de imágenes
+- **Análisis comparativo**: Evaluación automática antes/después
 
-### Métricas de Calidad
-- **PSNR**: Peak Signal-to-Noise Ratio
-- **SSIM**: Structural Similarity Index
-- **LPIPS**: Learned Perceptual Image Patch Similarity
-- **Similitud**: Coeficiente de correlación visual
+### ⚡ Ventajas de la Arquitectura Cloud
+- ✅ **Instalación instantánea**: Solo ~100 MB de dependencias
+- ✅ **Sin GPU necesaria**: Funciona en cualquier computadora
+- ✅ **Funciona en Streamlit Cloud**: Deploy gratuito y rápido
+- ✅ **Mantenimiento mínimo**: Sin actualizaciones de modelos pesados
+- ✅ **APIs gratuitas**: Para uso educativo y personal
 
 ## 🎯 Casos de Uso Específicos
 
@@ -201,23 +234,25 @@ params = {
 
 ## 📊 Parámetros de Rendimiento
 
-### Configuraciones Recomendadas
+### Configuraciones Recomendadas (Cloud API)
 
 **Para Desarrollo Rápido:**
 - Steps: 20-25
 - Guidance Scale: 6-7
 - Resolución: 512x512
-- Tiempo: 10-15 segundos (GPU)
+- Tiempo: 15-30 segundos (depende de la red)
 
 **Para Calidad Máxima:**
-- Steps: 50-80
-- Guidance Scale: 8-10
-- Resolución: 512x512+
-- Tiempo: 30-60 segundos (GPU)
+- Steps: 30-40
+- Guidance Scale: 8-9
+- Resolución: 512x512
+- Tiempo: 30-60 segundos (depende de la red)
 
-**Para CPU:**
-- Steps: 15-20 (reducir por velocidad)
-- Tiempo: 2-5 minutos por imagen
+**Notas sobre Rendimiento:**
+- ⏱️ El tiempo depende de la velocidad de Internet y carga del servidor
+- 🌐 Procesamiento 100% en la nube (sin uso de recursos locales)
+- 📊 HuggingFace puede tener límites de rate (requests por minuto)
+- ✅ Considera HuggingFace Pro para mayor velocidad y sin límites
 
 ## 🔍 Análisis Visual
 
@@ -250,23 +285,43 @@ analysis = analyzer.analyze(processed_image, "comparison_analysis")
 
 ### Problemas Comunes
 
-**Error: "CUDA out of memory"**
-```python
-# Reducir resolución de imagen
-image = image.resize((512, 512))
+**Error: "No se encontró HUGGINGFACE_API_KEY"**
+```bash
+# Verificar que el archivo .env existe
+ls -la .env
 
-# Reducir batch size
-torch.cuda.empty_cache()
+# Verificar contenido
+cat .env
+
+# Debe contener:
+HUGGINGFACE_API_KEY=hf_tu_token_aqui
+GOOGLE_API_KEY=tu_google_api_key_aqui
+```
+
+**Error: "API request failed with status 503"**
+```
+Causa: El modelo se está cargando en los servidores de HuggingFace
+Solución: Esperar 20-30 segundos y reintentar
+La app reintenta automáticamente una vez
+```
+
+**Error: "Rate limit exceeded"**
+```
+Causa: Demasiadas peticiones en poco tiempo
+Solución: 
+- Esperar unos minutos antes de procesar otra imagen
+- Considerar HuggingFace Pro para límites más altos
+- Usar API keys diferentes para desarrollo y producción
 ```
 
 **Procesamiento muy lento**
-```python
-# Verificar GPU disponible
-import torch
-print(torch.cuda.is_available())
-
-# Reducir parámetros
-params['num_inference_steps'] = 20
+```
+Causa: Conexión lenta o servidor saturado
+Solución:
+- Verificar conexión a Internet
+- Reducir resolución de imagen (automático en la app)
+- Reducir num_inference_steps a 20-25
+- Intentar en otro momento del día
 ```
 
 **Error de API Gemini**
@@ -276,28 +331,47 @@ export GOOGLE_API_KEY=tu_api_key
 
 # O crear archivo .env
 echo "GOOGLE_API_KEY=tu_api_key" > .env
+
+# Verificar que la key es válida en:
+# https://makersuite.google.com/app/apikey
+```
+
+**La app no inicia en Streamlit Cloud**
+```
+Verificar:
+1. Secrets configurados correctamente en Settings → Secrets
+2. requirements.txt sin errores de sintaxis
+3. Logs de deployment para ver errores específicos
+4. Que el repositorio esté actualizado
 ```
 
 ## 🚀 Próximas Mejoras
 
-- [ ] **Segment Anything Model (SAM)** para máscaras automáticas
-- [ ] **ControlNet** para mayor control espacial
-- [ ] **IP-Adapter** para control de estilo mejorado
+- [ ] **Segment Anything Model (SAM)** para máscaras automáticas (vía API)
+- [ ] **ControlNet API** para mayor control espacial
 - [ ] **Batch Processing** para múltiples imágenes
 - [ ] **Export de máscaras** y metadatos
-- [ ] **API REST** para integración externa
+- [ ] **Caché de resultados** para evitar reprocesamiento
+- [ ] **Soporte para más modelos** de HuggingFace
+- [ ] **Integración con Replicate.com** como alternativa
+- [ ] **API REST propia** para integración externa
 
 ## 📚 Referencias
+
+### Documentación de APIs
+- [HuggingFace Inference API](https://huggingface.co/docs/api-inference/index)
+- [Gemini API Documentation](https://ai.google.dev/)
+- [Streamlit Cloud Deployment](https://docs.streamlit.io/streamlit-community-cloud)
 
 ### Papers Importantes
 - "Denoising Diffusion Probabilistic Models" (Ho et al., 2020)
 - "High-Resolution Image Synthesis with Latent Diffusion Models" (Rombach et al., 2022)
 - "Segment Anything" (Kirillov et al., 2023)
 
-### Documentación
-- [Hugging Face Diffusers](https://huggingface.co/docs/diffusers/)
-- [Gemini API Documentation](https://ai.google.dev/)
+### Recursos Adicionales
 - [Stable Diffusion Models](https://stability.ai/)
+- [HuggingFace Model Hub](https://huggingface.co/models)
+- [Streamlit Documentation](https://docs.streamlit.io/)
 
 ## 👥 Contribución
 

@@ -1,156 +1,535 @@
 """
-Lightweight DiffusionProcessor para Streamlit Cloud
-Usa HuggingFace Inference API en lugar de modelos locales (diffusers / torch).
-Mantiene la interfaz:
-    dp = DiffusionProcessor()
-    result_image, metadata = dp.process(image=image, method='inpainting', **kwargs)
+Módulo de Procesamiento con HuggingFace Inference API - VERSIÓN CLOUD OPTIMIZADA
+Diseñado para funcionar en Streamlit Cloud sin modelos locales pesados
 """
 
-import os
-import io
-import time
-import base64
-import json
-from typing import Tuple, Dict, Any, Optional
-from PIL import Image
 import requests
-
-HF_API_URL_TEMPLATE = "https://api-inference.huggingface.co/models/{model}"
-# Mapear método -> modelo HF
-METHOD_TO_HF_MODEL = {
-    "inpainting": "stabilityai/stable-diffusion-2-inpainting",
-    "outpainting": "stabilityai/stable-diffusion-2-inpainting",
-    "style_transfer": "hakurei/waifu-diffusion",
-    "object_removal": "stabilityai/stable-diffusion-2-inpainting",
-    "background_replacement": "stabilityai/stable-diffusion-2-inpainting",
-    "img2img": "runwayml/stable-diffusion-v1-5",
-    "upscale": "stabilityai/stable-diffusion-x4-upscaler"
-}
-
-REQUEST_TIMEOUT = 60
-
+import numpy as np
+import time
+import os
+from PIL import Image, ImageDraw
+from typing import Optional, Tuple, Dict, Any
+import io
+import warnings
+warnings.filterwarnings("ignore")
 
 class DiffusionProcessor:
-    def __init__(self, hf_token: Optional[str] = None):
-        self.hf_token = hf_token or os.environ.get("HF_API_TOKEN") or os.environ.get("HUGGINGFACE_API_TOKEN")
-        if not self.hf_token:
-            print("⚠️ WARNING: No HF_API_TOKEN encontrado en el entorno.")
-        self.session = requests.Session()
-        if self.hf_token:
-            self.session.headers.update({"Authorization": f"Bearer {self.hf_token}"})
-
-    def _image_to_bytes(self, image):
-        buf = io.BytesIO()
-        image.save(buf, format="PNG")
-        buf.seek(0)
-        return buf
-
-    def _post_to_hf(self, model: str, payload: dict = None, files: dict = None) -> requests.Response:
-        url = HF_API_URL_TEMPLATE.format(model=model)
-        headers = {}
-
+    """Procesador usando HuggingFace Inference API - Sin modelos locales"""
+    
+    def __init__(self):
+        """Inicializar procesador con API de HuggingFace"""
+        # Obtener API key desde variable de entorno
+        self.api_key = os.getenv('HUGGINGFACE_API_KEY', '')
+        
+        # Endpoints de HuggingFace Inference API
+        self.api_endpoints = {
+            'inpainting': 'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-inpainting',
+            'img2img': 'https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5',
+            'style_transfer': 'https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5'
+        }
+        
+        self.device = "cloud"  # Indicar que se ejecuta en la nube
+        
+        print(f"✅ DiffusionProcessor inicializado - Modo: Cloud API")
+        print(f"🌐 Usando HuggingFace Inference API")
+        
+        if not self.api_key:
+            print("⚠️ ADVERTENCIA: No se encontró HUGGINGFACE_API_KEY en variables de entorno")
+            print("   Configura tu API key en el archivo .env o en Streamlit Cloud Secrets")
+    
+    def _call_huggingface_api(self, endpoint: str, image: Image.Image, 
+                             prompt: str, mask: Optional[Image.Image] = None,
+                             **params) -> Optional[Image.Image]:
+        """Llamar a la API de HuggingFace para generar imágenes"""
         try:
-            if files:
-                resp = self.session.post(url, data=payload or {}, files=files, timeout=REQUEST_TIMEOUT)
+            headers = {}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+            
+            # Convertir imagen a bytes
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0)
+            
+            # Preparar payload según el tipo de operación
+            files = {"inputs": img_byte_arr}
+            
+            # Parámetros de la API
+            payload = {
+                "prompt": prompt,
+                "num_inference_steps": params.get('num_inference_steps', 25),
+                "guidance_scale": params.get('guidance_scale', 7.5)
+            }
+            
+            # Si hay máscara, incluirla (para inpainting)
+            if mask is not None:
+                mask_byte_arr = io.BytesIO()
+                mask.save(mask_byte_arr, format='PNG')
+                mask_byte_arr.seek(0)
+                files["mask"] = mask_byte_arr
+            
+            # Realizar petición POST
+            print(f"🌐 Enviando petición a HuggingFace API...")
+            response = requests.post(
+                endpoint,
+                headers=headers,
+                files=files,
+                data=payload,
+                timeout=120  # 2 minutos de timeout
+            )
+            
+            # Verificar respuesta
+            if response.status_code == 200:
+                # Convertir respuesta a imagen
+                result_image = Image.open(io.BytesIO(response.content))
+                print(f"✅ Imagen generada exitosamente")
+                return result_image
+            elif response.status_code == 503:
+                print(f"⏳ Modelo cargándose en HuggingFace, reintentando...")
+                time.sleep(20)  # Esperar a que el modelo se cargue
+                # Reintentar una vez
+                response = requests.post(endpoint, headers=headers, files=files, data=payload, timeout=120)
+                if response.status_code == 200:
+                    result_image = Image.open(io.BytesIO(response.content))
+                    return result_image
+                else:
+                    print(f"❌ Error después de reintentar: {response.status_code}")
+                    print(f"Respuesta: {response.text}")
+                    return None
             else:
-                headers["Content-Type"] = "application/json"
-                resp = self.session.post(url, json=payload or {}, headers=headers, timeout=REQUEST_TIMEOUT)
-            return resp
-        except requests.RequestException as e:
-            raise RuntimeError(f"Error en la petición a HuggingFace: {e}")
-
-    def _parse_hf_response_to_image(self, resp: requests.Response) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
-        metadata = {"status_code": resp.status_code, "headers": dict(resp.headers)}
-
-        if resp.status_code != 200:
-            try:
-                metadata["error"] = resp.json().get("error", resp.text)
-            except:
-                metadata["error"] = resp.text
-            return None, metadata
-
-        content_type = resp.headers.get("content-type", "")
-
-        if content_type.startswith("image/"):
-            try:
-                return Image.open(io.BytesIO(resp.content)).convert("RGB"), metadata
-            except Exception as e:
-                metadata["error"] = str(e)
-                return None, metadata
-
-        try:
-            j = resp.json()
-            for key in ("image", "images", "generated_image", "image_base64", "result"):
-                if key in j:
-                    val = j[key]
-                    if isinstance(val, list) and val:
-                        v = val[0]
-                        if isinstance(v, str):
-                            if v.startswith("http"):
-                                down = self.session.get(v, timeout=REQUEST_TIMEOUT)
-                                return Image.open(io.BytesIO(down.content)).convert("RGB"), metadata
-                            else:
-                                b = base64.b64decode(v)
-                                return Image.open(io.BytesIO(b)).convert("RGB"), metadata
-                    elif isinstance(val, str):
-                        if val.startswith("http"):
-                            down = self.session.get(val, timeout=REQUEST_TIMEOUT)
-                            return Image.open(io.BytesIO(down.content)).convert("RGB"), metadata
-                        else:
-                            b = base64.b64decode(val)
-                            return Image.open(io.BytesIO(b)).convert("RGB"), metadata
-
-            metadata["error"] = "Respuesta JSON sin imagen reconocible."
-            metadata["response_json"] = j
-            return None, metadata
-
-        except:
-            metadata["error"] = "Respuesta no JSON y no image/*"
-            return None, metadata
-
-    def process(self, image: Image.Image, method: str = "inpainting", **kwargs):
-        start = time.time()
-        method_key = method.lower().replace(" ", "_")
-        model = METHOD_TO_HF_MODEL.get(method_key, METHOD_TO_HF_MODEL["inpainting"])
-
-        metadata = {
-            "method": method_key,
-            "model": model,
-            "timestamp": time.time(),
-        }
-
-        if not self.hf_token:
-            metadata["error"] = "HF_API_TOKEN no configurado."
-            return None, metadata
-
-        prompt = (
-            kwargs.get("prompt")
-            or kwargs.get("style_prompt")
-            or kwargs.get("object_description")
-            or ""
-        )
-
-        parameters = {
-            "num_inference_steps": kwargs.get("num_inference_steps"),
-            "guidance_scale": kwargs.get("guidance_scale"),
-            "strength": kwargs.get("strength"),
-        }
-        parameters = {k: v for k, v in parameters.items() if v is not None}
-
-        img_buf = self._image_to_bytes(image)
-
-        files = {"image": ("image.png", img_buf, "image/png")}
-        payload = {"inputs": prompt, "options": json.dumps({"wait_for_model": True})}
-        if parameters:
-            payload["parameters"] = json.dumps(parameters)
-
-        try:
-            resp = self._post_to_hf(model, payload=payload, files=files)
-            img, m = self._parse_hf_response_to_image(resp)
-            metadata.update(m)
-            metadata["time_s"] = round(time.time() - start, 2)
-            return img, metadata
+                print(f"❌ Error en API: {response.status_code}")
+                print(f"Respuesta: {response.text}")
+                return None
+                
         except Exception as e:
-            metadata["exception"] = str(e)
-            metadata["time_s"] = round(time.time() - start, 2)
-            return None, metadata
+            print(f"❌ Error llamando a HuggingFace API: {str(e)}")
+            return None
+    
+    def _optimize_image_size(self, image: Image.Image, max_size: int = 512) -> Image.Image:
+        """Redimensionar imagen para optimizar velocidad y costos de API"""
+        width, height = image.size
+        
+        # Si la imagen es muy grande, redimensionar
+        if max(width, height) > max_size:
+            if width > height:
+                new_width = max_size
+                new_height = int((height * max_size) / width)
+            else:
+                new_height = max_size
+                new_width = int((width * max_size) / height)
+            
+            # Asegurar que las dimensiones sean múltiplos de 8 (requerimiento de Stable Diffusion)
+            new_width = (new_width // 8) * 8
+            new_height = (new_height // 8) * 8
+            
+            print(f"📐 Redimensionando: {width}x{height} → {new_width}x{new_height}")
+            return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        return image
+    
+    def create_rectangular_mask(self, width: int, height: int, x: int, y: int,
+                               rect_width: int, rect_height: int) -> Image.Image:
+        """Crear máscara rectangular"""
+        mask_array = np.zeros((height, width), dtype=np.uint8)
+        mask_array[y:y+rect_height, x:x+rect_width] = 255
+        return Image.fromarray(mask_array)
+    
+    def create_circular_mask(self, width: int, height: int, center_x: int,
+                           center_y: int, radius: int) -> Image.Image:
+        """Crear máscara circular"""
+        mask_array = np.zeros((height, width), dtype=np.uint8)
+        y, x = np.ogrid[:height, :width]
+        mask = (x - center_x)**2 + (y - center_y)**2 <= radius**2
+        mask_array[mask] = 255
+        return Image.fromarray(mask_array)
+    
+    def inpainting(self, image: Image.Image, mask: Image.Image,
+                  prompt: str, **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
+        """Realizar inpainting usando HuggingFace API"""
+        try:
+            # Optimizar tamaño de imagen
+            image = self._optimize_image_size(image)
+            mask = mask.resize(image.size, Image.Resampling.LANCZOS)
+            
+            # Parámetros
+            num_inference_steps = kwargs.get('num_inference_steps', 25)
+            guidance_scale = kwargs.get('guidance_scale', 7.0)
+            
+            # Llamar a la API
+            result = self._call_huggingface_api(
+                self.api_endpoints['inpainting'],
+                image,
+                prompt,
+                mask=mask,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale
+            )
+            
+            if result is None:
+                raise Exception("No se pudo generar la imagen con la API")
+            
+            metadata = {
+                'method': 'inpainting',
+                'prompt': prompt,
+                'steps': num_inference_steps,
+                'guidance_scale': guidance_scale,
+                'device': 'cloud',
+                'api': 'huggingface'
+            }
+            
+            return result, metadata
+            
+        except Exception as e:
+            raise Exception(f"Error en inpainting: {str(e)}")
+    
+    def outpainting(self, image: Image.Image, extension_factor: float = 1.5,
+                   prompt: str = "extended natural landscape", **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
+        """Realizar outpainting usando inpainting API"""
+        try:
+            # Optimizar imagen original
+            image = self._optimize_image_size(image)
+            original_width, original_height = image.size
+            
+            # Calcular nuevas dimensiones (múltiplos de 8)
+            new_width = int(original_width * extension_factor)
+            new_height = int(original_height * extension_factor)
+            new_width = (new_width // 8) * 8
+            new_height = (new_height // 8) * 8
+            
+            print(f"🖼️ Outpainting: {original_width}x{original_height} → {new_width}x{new_height}")
+            
+            # Crear canvas extendido
+            extended_canvas = Image.new('RGB', (new_width, new_height), (128, 128, 128))
+            
+            # Centrar imagen original
+            x_offset = (new_width - original_width) // 2
+            y_offset = (new_height - original_height) // 2
+            extended_canvas.paste(image, (x_offset, y_offset))
+            
+            # Crear máscara para bordes
+            mask_array = np.zeros((new_height, new_width), dtype=np.uint8)
+            mask_array[:y_offset, :] = 255
+            mask_array[y_offset + original_height:, :] = 255
+            mask_array[y_offset:y_offset + original_height, :x_offset] = 255
+            mask_array[y_offset:y_offset + original_height, x_offset + original_width:] = 255
+            mask = Image.fromarray(mask_array)
+            
+            # Llamar a la API
+            num_inference_steps = kwargs.get('num_inference_steps', 30)
+            guidance_scale = kwargs.get('guidance_scale', 8.0)
+            
+            result = self._call_huggingface_api(
+                self.api_endpoints['inpainting'],
+                extended_canvas,
+                prompt,
+                mask=mask,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale
+            )
+            
+            if result is None:
+                raise Exception("No se pudo generar la imagen con la API")
+            
+            metadata = {
+                'method': 'outpainting',
+                'prompt': prompt,
+                'steps': num_inference_steps,
+                'guidance_scale': guidance_scale,
+                'device': 'cloud',
+                'api': 'huggingface',
+                'original_size': (original_width, original_height),
+                'extended_size': (new_width, new_height)
+            }
+            
+            return result, metadata
+            
+        except Exception as e:
+            raise Exception(f"Error en outpainting: {str(e)}")
+    
+    def style_transfer(self, image: Image.Image, style_prompt: str,
+                      **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
+        """Transferir estilo usando img2img API"""
+        try:
+            # Optimizar imagen
+            image = self._optimize_image_size(image)
+            
+            strength = kwargs.get('strength', 0.5)
+            num_inference_steps = kwargs.get('num_inference_steps', 20)
+            guidance_scale = kwargs.get('guidance_scale', 7.0)
+            
+            # Para style transfer, usar el endpoint de img2img
+            result = self._call_huggingface_api(
+                self.api_endpoints['style_transfer'],
+                image,
+                style_prompt,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale
+            )
+            
+            if result is None:
+                raise Exception("No se pudo generar la imagen con la API")
+            
+            metadata = {
+                'method': 'style_transfer',
+                'prompt': style_prompt,
+                'strength': strength,
+                'steps': num_inference_steps,
+                'guidance_scale': guidance_scale,
+                'device': 'cloud',
+                'api': 'huggingface'
+            }
+            
+            return result, metadata
+            
+        except Exception as e:
+            raise Exception(f"Error en style transfer: {str(e)}")
+    
+    def object_removal(self, image: Image.Image, mask: Image.Image,
+                      context_prompt: str, **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
+        """Eliminar objetos usando inpainting API"""
+        try:
+            # Optimizar imagen y máscara
+            image = self._optimize_image_size(image)
+            mask = mask.resize(image.size, Image.Resampling.LANCZOS)
+            
+            num_inference_steps = kwargs.get('num_inference_steps', 30)
+            guidance_scale = kwargs.get('guidance_scale', 9.0)
+            
+            # Prompt mejorado para eliminación
+            enhanced_prompt = f"remove object and fill with {context_prompt}, seamless natural background"
+            
+            result = self._call_huggingface_api(
+                self.api_endpoints['inpainting'],
+                image,
+                enhanced_prompt,
+                mask=mask,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale
+            )
+            
+            if result is None:
+                raise Exception("No se pudo generar la imagen con la API")
+            
+            metadata = {
+                'method': 'object_removal',
+                'context_prompt': context_prompt,
+                'enhanced_prompt': enhanced_prompt,
+                'steps': num_inference_steps,
+                'guidance_scale': guidance_scale,
+                'device': 'cloud',
+                'api': 'huggingface'
+            }
+            
+            return result, metadata
+            
+        except Exception as e:
+            raise Exception(f"Error en object removal: {str(e)}")
+    
+    def _create_intelligent_mask(self, image: Image.Image, object_description: str,
+                               context_prompt: str) -> Image.Image:
+        """Crear máscara inteligente basada en descripción del objeto"""
+        width, height = image.size
+        
+        # Palabras clave para diferentes tipos de objetos
+        keywords = {
+            'person': ['person', 'people', 'man', 'woman', 'boy', 'girl', 'face', 'body', 'head'],
+            'vehicle': ['car', 'truck', 'bus', 'motorcycle', 'bike', 'vehicle', 'automobile'],
+            'animal': ['dog', 'cat', 'bird', 'horse', 'cow', 'animal', 'pet'],
+            'building': ['house', 'building', 'structure', 'tower', 'wall', 'fence'],
+            'object': ['object', 'item', 'thing', 'sign', 'banner', 'post', 'pole'],
+            'tree': ['tree', 'plant', 'bush', 'vegetation', 'branch'],
+            'furniture': ['chair', 'table', 'bench', 'seat', 'furniture']
+        }
+        
+        # Detectar tipo de objeto
+        detected_type = 'object'
+        description_lower = object_description.lower()
+        
+        for obj_type, type_keywords in keywords.items():
+            if any(keyword in description_lower for keyword in type_keywords):
+                detected_type = obj_type
+                break
+        
+        # Crear máscara según el tipo detectado
+        mask_array = np.zeros((height, width), dtype=np.uint8)
+        
+        if detected_type == 'person':
+            center_x, center_y = width // 3, height // 2
+            rect_width, rect_height = width // 3, height // 2
+            mask_array[center_y-rect_height//2:center_y+rect_height//2,
+                      center_x-rect_width//2:center_x+rect_width//2] = 255
+        elif detected_type == 'vehicle':
+            rect_width, rect_height = width // 2, height // 4
+            center_x, center_y = width // 2, int(height * 0.8)
+            mask_array[center_y-rect_height//2:center_y+rect_height//2,
+                      center_x-rect_width//2:center_x+rect_width//2] = 255
+        elif detected_type == 'building':
+            rect_width, rect_height = width // 2, height
+            center_x, center_y = width // 3, height // 2
+            mask_array[center_y-rect_height//2:center_y+rect_height//2,
+                      center_x-rect_width//2:center_x+rect_width//2] = 255
+        else:
+            rect_width, rect_height = width // 3, height // 3
+            center_x, center_y = width // 3, height // 2
+            mask_array[center_y-rect_height//2:center_y+rect_height//2,
+                      center_x-rect_width//2:center_x+rect_width//2] = 255
+        
+        return Image.fromarray(mask_array)
+    
+    def background_replacement(self, image: Image.Image, mask: Image.Image,
+                             background_prompt: str, **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
+        """Reemplazar fondo usando inpainting API"""
+        try:
+            return self.inpainting(image, mask, background_prompt, **kwargs)
+        except Exception as e:
+            raise Exception(f"Error en background replacement: {str(e)}")
+    
+    def intelligent_composition(self, image: Image.Image, elements_prompt: str,
+                              **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
+        """Composición inteligente usando img2img API"""
+        try:
+            # Optimizar imagen
+            image = self._optimize_image_size(image)
+            
+            strength = kwargs.get('strength', 0.4)
+            num_inference_steps = kwargs.get('num_inference_steps', 25)
+            guidance_scale = kwargs.get('guidance_scale', 7.0)
+            
+            result = self._call_huggingface_api(
+                self.api_endpoints['img2img'],
+                image,
+                elements_prompt,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale
+            )
+            
+            if result is None:
+                raise Exception("No se pudo generar la imagen con la API")
+            
+            metadata = {
+                'method': 'intelligent_composition',
+                'prompt': elements_prompt,
+                'strength': strength,
+                'steps': num_inference_steps,
+                'guidance_scale': guidance_scale,
+                'device': 'cloud',
+                'api': 'huggingface'
+            }
+            
+            return result, metadata
+            
+        except Exception as e:
+            raise Exception(f"Error en intelligent composition: {str(e)}")
+    
+    def process(self, image: Image.Image, method: str, **kwargs) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
+        """Método principal de procesamiento usando APIs"""
+        try:
+            start_time = time.time()
+            
+            original_size = image.size
+            print(f"🚀 Iniciando procesamiento: {method}")
+            print(f"📐 Tamaño original: {original_size}")
+            
+            # Filtrar kwargs
+            filtered_kwargs = {k: v for k, v in kwargs.items()
+                             if k not in ['prompt', 'style_prompt', 'context_prompt', 'background_prompt', 'elements_prompt']}
+            
+            # Procesar según método
+            if method == "inpainting":
+                mask = self._create_optimized_mask(image, kwargs, "inpainting")
+                prompt = kwargs.get('prompt', 'natural background')
+                result, metadata = self.inpainting(image, mask, prompt, **filtered_kwargs)
+                
+            elif method == "outpainting":
+                extension_factor = kwargs.get('extension_factor', 1.5)
+                prompt = kwargs.get('prompt', 'extended natural landscape seamlessly')
+                filtered_outpaint_kwargs = {k: v for k, v in filtered_kwargs.items()
+                                          if k not in ['extension_factor', 'prompt']}
+                result, metadata = self.outpainting(image, extension_factor, prompt, **filtered_outpaint_kwargs)
+                
+            elif method == "style_transfer":
+                style_prompt = kwargs.get('style_prompt', 'artistic style painting')
+                result, metadata = self.style_transfer(image, style_prompt, **filtered_kwargs)
+                
+            elif method == "object_removal":
+                object_description = kwargs.get('object_description', 'unwanted object')
+                context_prompt = kwargs.get('context_prompt', 'natural seamless background')
+                mask = self._create_intelligent_mask(image, object_description, context_prompt)
+                result, metadata = self.object_removal(image, mask, context_prompt, **filtered_kwargs)
+                
+            elif method == "background_replacement":
+                mask = self._create_optimized_mask(image, kwargs, "background_replacement")
+                background_prompt = kwargs.get('background_prompt', 'beautiful background')
+                result, metadata = self.background_replacement(image, mask, background_prompt, **filtered_kwargs)
+                
+            elif method == "intelligent_composition":
+                elements_prompt = kwargs.get('elements_prompt', 'harmonious composition')
+                result, metadata = self.intelligent_composition(image, elements_prompt, **filtered_kwargs)
+                
+            else:
+                raise ValueError(f"Método no soportado: {method}")
+            
+            # Añadir métricas
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            metadata.update({
+                'processing_time': f"{processing_time:.2f}s",
+                'original_size': original_size,
+                'cloud_processing': True,
+                'no_local_models': True
+            })
+            
+            print(f"✅ Procesamiento completado en {processing_time:.2f}s")
+            return result, metadata
+                
+        except Exception as e:
+            print(f"❌ Error procesando imagen: {str(e)}")
+            return None, {"error": str(e)}
+    
+    def _create_optimized_mask(self, image: Image.Image, kwargs: Dict, method_type: str) -> Image.Image:
+        """Crear máscara optimizada según el método"""
+        width, height = image.size
+        mask = kwargs.get('mask')
+        
+        if mask is None:
+            if 'mask_coords' in kwargs:
+                x1, y1, x2, y2 = kwargs['mask_coords']
+                mask = self.create_rectangular_mask(
+                    width, height, x1, y1, x2-x1, y2-y1
+                )
+            else:
+                # Máscaras por defecto
+                if method_type == "inpainting":
+                    mask = self.create_rectangular_mask(width, height, 
+                        width//3, height//3, width//6, height//6)
+                elif method_type == "outpainting":
+                    mask_array = np.zeros((height, width), dtype=np.uint8)
+                    border_size = min(width, height) // 5
+                    mask_array[:border_size, :] = 255
+                    mask_array[-border_size:, :] = 255
+                    mask_array[:, :border_size] = 255
+                    mask_array[:, -border_size:] = 255
+                    mask = Image.fromarray(mask_array)
+                elif method_type == "object_removal":
+                    mask = self.create_rectangular_mask(width, height,
+                        width//2, height//2, width//8, height//8)
+                elif method_type == "background_replacement":
+                    mask_array = np.ones((height, width), dtype=np.uint8) * 255
+                    y, x = np.ogrid[:height, :width]
+                    center_mask = (x - width//2)**2 + (y - height//2)**2 <= (min(width, height)//3)**2
+                    mask_array[center_mask] = 0
+                    mask = Image.fromarray(mask_array)
+        
+        return mask
+    
+    def get_info(self) -> Dict[str, Any]:
+        """Obtener información del procesador"""
+        return {
+            'device': 'cloud',
+            'api': 'huggingface',
+            'models_loaded': 'none (cloud-based)',
+            'cuda_available': False,
+            'local_models': False,
+            'api_key_configured': bool(self.api_key)
+        }

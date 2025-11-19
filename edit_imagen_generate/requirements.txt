@@ -1,0 +1,51 @@
+# Aplicación MVP: Edición Generativa de Imágenes con Análisis Inteligente
+# VERSIÓN OPTIMIZADA PARA STREAMLIT CLOUD
+# Procesamiento Digital de Imágenes - IFTS24
+
+# Framework web
+streamlit>=1.28.0
+
+# Procesamiento de imágenes (solo librerías ligeras)
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# API de Gemini (para análisis avanzado)
+google-generativeai>=0.3.0
+google-genai>=0.0.1
+
+# Utilidades para APIs
+requests>=2.31.0
+python-dotenv>=0.21.0
+
+# ============================================
+# DEPENDENCIAS ELIMINADAS (ya no necesarias)
+# ============================================
+# Las siguientes dependencias fueron removidas porque ahora usamos
+# HuggingFace Inference API en lugar de modelos locales:
+#
+# diffusers>=0.21.0          # ~2-4 GB (modelos de difusión)
+# transformers>=4.35.0       # ~1-2 GB (transformers)
+# accelerate>=0.24.0         # Aceleración GPU
+# torch>=2.0.0               # ~2-3 GB (PyTorch)
+# torchvision>=0.15.0        # ~500 MB
+# opencv-python>=4.8.0       # ~100 MB
+# scikit-image>=0.21.0       # ~50 MB
+# scipy>=1.11.0              # ~50 MB
+# scikit-learn>=1.3.0        # ~50 MB
+# lpips>=0.1.4               # Métricas de imagen
+# seaborn>=0.12.0            # Visualización
+# matplotlib>=3.7.0          # Gráficos
+# imageio>=2.31.0            # I/O de imágenes
+# pyyaml>=6.0.0              # Configuración
+# tqdm>=4.66.0               # Barras de progreso
+#
+# TOTAL AHORRADO: ~8-10 GB de dependencias
+# ============================================
+
+# NOTA IMPORTANTE:
+# Para que la aplicación funcione, necesitas configurar tu API key de HuggingFace
+# en el archivo .env o en los Secrets de Streamlit Cloud:
+#
+# HUGGINGFACE_API_KEY=tu_api_key_aqui
+#
+# Obtén tu API key gratis en: https://huggingface.co/settings/tokens
