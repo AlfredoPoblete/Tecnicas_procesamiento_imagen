@@ -15,6 +15,11 @@ class Config:
     
     # Configuración simplificada y consolidada
     MODEL_CONFIG = {
+        'inpainting': {
+            'model_name': 'runwayml/stable-diffusion-inpainting',
+            'default_steps': 25,
+            'default_guidance': 7.0
+        },
         'img2img': {
             'model_name': 'runwayml/stable-diffusion-v1-5',
             'default_steps': 20,

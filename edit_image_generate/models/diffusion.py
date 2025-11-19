@@ -1,6 +1,5 @@
 """
-Módulo de Procesamiento con Modelos de Difusión - VERSIÓN OPTIMIZADA STREAMLIT
-Usa exclusivamente Hugging Face Inference API para evitar problemas de memoria en la nube
+Módulo de Procesamiento con Modelos de Difusión - VERSIÓN OPTIMIZADA
 """
 
 import os
@@ -11,41 +10,126 @@ import requests
 import torch
 import numpy as np
 from PIL import Image, ImageDraw
+from diffusers import (
+    StableDiffusionInpaintPipeline,
+    StableDiffusionImg2ImgPipeline,
+    StableDiffusionUpscalePipeline,
+    ControlNetModel,
+    StableDiffusionControlNetPipeline
+)
 from typing import Optional, Tuple, Dict, Any
 import warnings
 warnings.filterwarnings("ignore")
 
 class DiffusionProcessor:
-    """Procesador principal para modelos de difusión - EXCLUSIVAMENTE API REMOTA"""
+    """Procesador principal para modelos de difusión OPTIMIZADO"""
     
     def __init__(self):
-        # FORZAR modo API remota para Streamlit Cloud
-        self.use_hf_api = True
+        # Configurar optimizaciones de GPU primero
+        self._setup_gpu_optimizations()
+        
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.pipes = {}  # Diccionario vacío - Carga lazy
+        # Modo remoto por Hugging Face Inference API (evita descargar pesos pesados)
+        # Activar con la variable de entorno `USE_HF_API=true` y variable de token `HUGGINGFACE_API_TOKEN`
+        use_hf = os.getenv('USE_HF_API', '').lower() in ['1', 'true', 'yes']
+        self.use_hf_api = use_hf
         self.hf_token = os.getenv('HUGGINGFACE_API_TOKEN') or os.getenv('HUGGINGFACEHUB_API_TOKEN') or os.getenv('HF_TOKEN')
         
-        if not self.hf_token:
-            raise RuntimeError("HUGGINGFACE_API_TOKEN es obligatorio para Streamlit Cloud")
-        
-        self.device = "cpu"  # No importa ya que usamos API remota
-        self.pipes = {}  # No necesitamos pipelines locales
-        
-        # Configuración de modelos (solo nombres para API remota)
-        # NOTE: hemos eliminado la configuración específica de "inpainting" para
-        # evitar cualquier intento de carga/descarga local de modelos de inpainting.
-        # Las operaciones basadas en imagen-a-imagen usan el modelo `img2img`.
+        # Configuración de modelos para carga lazy
         self.model_configs = {
+            'inpainting': {
+                'model_name': 'runwayml/stable-diffusion-inpainting',
+                'pipeline_class': StableDiffusionInpaintPipeline
+            },
             'img2img': {
-                'model_name': 'runwayml/stable-diffusion-v1-5'
+                'model_name': 'runwayml/stable-diffusion-v1-5', 
+                'pipeline_class': StableDiffusionImg2ImgPipeline
             },
             'upscale': {
-                'model_name': 'stabilityai/stable-diffusion-x4-upscaler'
+                'model_name': 'stabilityai/stable-diffusion-x4-upscaler',
+                'pipeline_class': StableDiffusionUpscalePipeline
             }
         }
         
-        print("🚀 DiffusionProcessor OPTIMIZADO para Streamlit Cloud")
-        print("✅ Usando EXCLUSIVAMENTE Hugging Face Inference API")
-        print("✅ Sin descarga de modelos locales - Sin problemas de memoria")
+        print(f"DiffusionProcessor inicializado - Dispositivo: {self.device}")
+        if self.device == 'cuda':
+            print("GPU disponible - Optimizaciones activadas")
+        else:
+            print("CPU solamente - El procesamiento sera mas lento")
         
+    def _setup_gpu_optimizations(self):
+        """Configurar optimizaciones de GPU para mayor velocidad"""
+        try:
+            import torch
+            if torch.cuda.is_available():
+                # Optimizaciones CUDA
+                torch.backends.cudnn.benchmark = True
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.set_float32_matmul_precision('high')
+                print("Optimizaciones de GPU configuradas")
+        except Exception as e:
+            print(f"Error configurando optimizaciones GPU: {e}")
+        
+    def _get_device_dtype(self):
+        """Obtener dtype optimizado según el dispositivo"""
+        import torch
+        if self.device == "cuda":
+            return torch.float16  # Más rápido en GPU
+        else:
+            return torch.float32
+        
+    def _load_single_model(self, model_key: str):
+        """Cargar un modelo específico bajo demanda"""
+        if model_key not in self.model_configs:
+            raise ValueError(f"Modelo no configurado: {model_key}")
+            
+        try:
+            config = self.model_configs[model_key]
+            model_name = config['model_name']
+            pipeline_class = config['pipeline_class']
+            
+            print(f"Cargando modelo {model_key}: {model_name}")
+
+            # Si está configurado para usar la API remota, no descargamos pesos
+            if self.use_hf_api:
+                if not self.hf_token:
+                    raise RuntimeError("USE_HF_API está activado pero no se encontró HUGGINGFACE_API_TOKEN en el entorno")
+                print(f"Usando Hugging Face Inference API para: {model_name}")
+                # Guardamos una referencia ligera indicando modo remoto
+                return {'remote': True, 'model_name': model_name, 'token': self.hf_token}
+
+            # Carga local vía diffusers
+            pipe = pipeline_class.from_pretrained(
+                model_name,
+                torch_dtype=self._get_device_dtype(),
+                safety_checker=None,
+                resume_download=True,
+                cache_dir=None
+            )
+
+            # Mover al dispositivo de forma segura
+            if hasattr(torch.nn.Module, 'to_empty'):
+                try:
+                    pipe = pipe.to_empty(device=self.device)
+                except:
+                    pipe = pipe.to(self.device)
+            else:
+                pipe = pipe.to(self.device)
+
+            print(f"Modelo {model_key} cargado exitosamente (local)")
+            return pipe
+            
+        except Exception as e:
+            print(f"Error cargando modelo {model_key}: {str(e)}")
+            raise
+    
+    def _get_model(self, model_key: str):
+        """Obtener modelo - cargar si no existe (carga lazy)"""
+        if model_key not in self.pipes:
+            self.pipes[model_key] = self._load_single_model(model_key)
+        return self.pipes[model_key]
+
     def _call_hf_api(self, model_name: str, payload: dict, timeout: int = 120):
         """Llamar al endpoint de Inference API de Hugging Face.
 
@@ -130,7 +214,7 @@ class DiffusionProcessor:
         
         # Si la imagen es muy pequeña, mantener para preservar calidad
         elif min(width, height) < 256:
-            print(f"Imagen pequeña ({width}x{height}) - manteniendo tamaño para preservar calidad")
+            print(f"Imagen pequena ({width}x{height}) - manteniendo tamano para preservar calidad")
             return image
         
         return image
@@ -153,15 +237,69 @@ class DiffusionProcessor:
     
     def inpainting(self, image: Image.Image, mask: Image.Image,
                   prompt: str, **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
-        """Función deshabilitada - usar outpainting o object_removal como alternativa"""
-        raise Exception("Inpainting no está disponible. Usa 'Outpainting (Extender imagen)' o 'Object Removal (Eliminar objeto específico)' como alternativas.")
+        """Realizar inpainting en la imagen"""
+        try:
+            pipe = self._get_model('inpainting')  # Carga lazy
+
+            # Parámetros por defecto optimizados
+            num_inference_steps = kwargs.get('num_inference_steps', 25)  # Reducido de 30
+            guidance_scale = kwargs.get('guidance_scale', 7.0)  # Reducido de 7.5
+
+            # Si estamos usando la API remota de Hugging Face
+            if isinstance(pipe, dict) and pipe.get('remote'):
+                # Codificar imágenes a base64
+                buf_img = io.BytesIO()
+                image.save(buf_img, format='PNG')
+                img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
+
+                buf_mask = io.BytesIO()
+                mask.save(buf_mask, format='PNG')
+                mask_b64 = base64.b64encode(buf_mask.getvalue()).decode('utf-8')
+
+                payload = {
+                    'inputs': {
+                        'prompt': prompt,
+                        'image': img_b64,
+                        'mask_image': mask_b64
+                    },
+                    'parameters': {
+                        'num_inference_steps': num_inference_steps,
+                        'guidance_scale': guidance_scale
+                    }
+                }
+
+                resp = self._call_hf_api(pipe['model_name'], payload)
+                result = self._parse_hf_image_response(resp)
+
+            else:
+                # Procesar localmente con diffusers
+                result = pipe(
+                    prompt=prompt,
+                    image=image,
+                    mask_image=mask,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale
+                ).images[0]
+            
+            metadata = {
+                'method': 'inpainting',
+                'prompt': prompt,
+                'steps': num_inference_steps,
+                'guidance_scale': guidance_scale,
+                'device': self.device,
+                'optimized': True
+            }
+            
+            return result, metadata
+            
+        except Exception as e:
+            raise Exception(f"Error en inpainting: {str(e)}")
     
     def outpainting(self, image: Image.Image, extension_factor: float = 1.5,
                    prompt: str = "extended natural landscape", **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
-        """Realizar outpainting (extender imagen) - EXCLUSIVAMENTE API REMOTA"""
+        """Realizar outpainting (extender imagen) - VERSIÓN CORREGIDA"""
         try:
-            # Usar el modelo img2img (no inpainting) para operaciones de outpainting
-            model_name = self.model_configs['img2img']['model_name']
+            pipe = self._get_model('inpainting')  # Usa inpainting para outpainting
             
             # Obtener dimensiones originales
             original_width, original_height = image.size
@@ -206,43 +344,50 @@ class DiffusionProcessor:
             
             num_inference_steps = kwargs.get('num_inference_steps', 40)
             guidance_scale = kwargs.get('guidance_scale', 8.0)
-            
-            # Codificar imágenes a base64
-            buf_img = io.BytesIO()
-            extended_canvas.save(buf_img, format='PNG')
-            img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
+            # Aplicar inpainting para extender la imagen
+            if isinstance(pipe, dict) and pipe.get('remote'):
+                buf_img = io.BytesIO()
+                extended_canvas.save(buf_img, format='PNG')
+                img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
 
-            buf_mask = io.BytesIO()
-            mask.save(buf_mask, format='PNG')
-            mask_b64 = base64.b64encode(buf_mask.getvalue()).decode('utf-8')
+                buf_mask = io.BytesIO()
+                mask.save(buf_mask, format='PNG')
+                mask_b64 = base64.b64encode(buf_mask.getvalue()).decode('utf-8')
 
-            payload = {
-                'inputs': {
-                    'prompt': prompt,
-                    'image': img_b64,
-                    'mask_image': mask_b64
-                },
-                'parameters': {
-                    'num_inference_steps': num_inference_steps,
-                    'guidance_scale': guidance_scale
+                payload = {
+                    'inputs': {
+                        'prompt': prompt,
+                        'image': img_b64,
+                        'mask_image': mask_b64
+                    },
+                    'parameters': {
+                        'num_inference_steps': num_inference_steps,
+                        'guidance_scale': guidance_scale
+                    }
                 }
-            }
 
-            resp = self._call_hf_api(model_name, payload)
-            result = self._parse_hf_image_response(resp)
+                resp = self._call_hf_api(pipe['model_name'], payload)
+                result = self._parse_hf_image_response(resp)
+            else:
+                result = pipe(
+                    prompt=prompt,
+                    image=extended_canvas,
+                    mask_image=mask,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale
+                ).images[0]
             
             metadata = {
                 'method': 'outpainting',
                 'prompt': prompt,
                 'steps': num_inference_steps,
                 'guidance_scale': guidance_scale,
-                'device': 'hf_api',
+                'device': self.device,
                 'optimized': True,
                 'original_size': (original_width, original_height),
                 'extended_size': (new_width, new_height),
                 'extension_factor': extension_factor,
-                'center_offset': (x_offset, y_offset),
-                'api_mode': 'huggingface_remote'
+                'center_offset': (x_offset, y_offset)
             }
             
             print(f"✅ Outpainting completado: {result.size}")
@@ -253,33 +398,41 @@ class DiffusionProcessor:
     
     def style_transfer(self, image: Image.Image, style_prompt: str,
                       **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
-        """Transferir estilo artístico - EXCLUSIVAMENTE API REMOTA"""
+        """Transferir estilo artístico"""
         try:
-            model_name = self.model_configs['img2img']['model_name']
+            pipe = self._get_model('img2img')  # Carga lazy
             
-            strength = kwargs.get('strength', 0.5)
-            num_inference_steps = kwargs.get('num_inference_steps', 20)
-            guidance_scale = kwargs.get('guidance_scale', 6.5)
+            strength = kwargs.get('strength', 0.5)  # Reducido de 0.6
+            num_inference_steps = kwargs.get('num_inference_steps', 20)  # Reducido de 30
+            guidance_scale = kwargs.get('guidance_scale', 6.5)  # Reducido de 7.5
             
-            # Codificar imagen a base64
-            buf_img = io.BytesIO()
-            image.save(buf_img, format='PNG')
-            img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
+            if isinstance(pipe, dict) and pipe.get('remote'):
+                buf_img = io.BytesIO()
+                image.save(buf_img, format='PNG')
+                img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
 
-            payload = {
-                'inputs': {
-                    'prompt': style_prompt,
-                    'image': img_b64
-                },
-                'parameters': {
-                    'strength': strength,
-                    'num_inference_steps': num_inference_steps,
-                    'guidance_scale': guidance_scale
+                payload = {
+                    'inputs': {
+                        'prompt': style_prompt,
+                        'image': img_b64
+                    },
+                    'parameters': {
+                        'strength': strength,
+                        'num_inference_steps': num_inference_steps,
+                        'guidance_scale': guidance_scale
+                    }
                 }
-            }
 
-            resp = self._call_hf_api(model_name, payload)
-            result = self._parse_hf_image_response(resp)
+                resp = self._call_hf_api(pipe['model_name'], payload)
+                result = self._parse_hf_image_response(resp)
+            else:
+                result = pipe(
+                    prompt=style_prompt,
+                    image=image,
+                    strength=strength,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale
+                ).images[0]
             
             metadata = {
                 'method': 'style_transfer',
@@ -287,9 +440,8 @@ class DiffusionProcessor:
                 'strength': strength,
                 'steps': num_inference_steps,
                 'guidance_scale': guidance_scale,
-                'device': 'hf_api',
-                'optimized': True,
-                'api_mode': 'huggingface_remote'
+                'device': self.device,
+                'optimized': True
             }
             
             return result, metadata
@@ -299,41 +451,48 @@ class DiffusionProcessor:
     
     def object_removal(self, image: Image.Image, mask: Image.Image,
                       context_prompt: str, **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
-        """Eliminar objetos específicos con detección inteligente - EXCLUSIVAMENTE API REMOTA"""
+        """Eliminar objetos específicos con detección inteligente"""
         try:
-            # Para eliminación de objetos usamos el modelo img2img vía API remota
-            model_name = self.model_configs['img2img']['model_name']
+            pipe = self._get_model('inpainting')  # Carga lazy
             
             # Parámetros optimizados para eliminación inteligente
-            num_inference_steps = kwargs.get('num_inference_steps', 45)
-            guidance_scale = kwargs.get('guidance_scale', 9.0)
+            num_inference_steps = kwargs.get('num_inference_steps', 45)  # Más pasos para mejor calidad
+            guidance_scale = kwargs.get('guidance_scale', 9.0)  # Mayor adherencia al contexto
             
             # Prompts mejorados para eliminación inteligente
             enhanced_prompt = f"remove object and fill with {context_prompt}, seamless natural background"
             
-            # Codificar imágenes a base64
-            buf_img = io.BytesIO()
-            image.save(buf_img, format='PNG')
-            img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
+            if isinstance(pipe, dict) and pipe.get('remote'):
+                buf_img = io.BytesIO()
+                image.save(buf_img, format='PNG')
+                img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
 
-            buf_mask = io.BytesIO()
-            mask.save(buf_mask, format='PNG')
-            mask_b64 = base64.b64encode(buf_mask.getvalue()).decode('utf-8')
+                buf_mask = io.BytesIO()
+                mask.save(buf_mask, format='PNG')
+                mask_b64 = base64.b64encode(buf_mask.getvalue()).decode('utf-8')
 
-            payload = {
-                'inputs': {
-                    'prompt': enhanced_prompt,
-                    'image': img_b64,
-                    'mask_image': mask_b64
-                },
-                'parameters': {
-                    'num_inference_steps': num_inference_steps,
-                    'guidance_scale': guidance_scale
+                payload = {
+                    'inputs': {
+                        'prompt': enhanced_prompt,
+                        'image': img_b64,
+                        'mask_image': mask_b64
+                    },
+                    'parameters': {
+                        'num_inference_steps': num_inference_steps,
+                        'guidance_scale': guidance_scale
+                    }
                 }
-            }
 
-            resp = self._call_hf_api(model_name, payload)
-            result = self._parse_hf_image_response(resp)
+                resp = self._call_hf_api(pipe['model_name'], payload)
+                result = self._parse_hf_image_response(resp)
+            else:
+                result = pipe(
+                    prompt=enhanced_prompt,
+                    image=image,
+                    mask_image=mask,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale
+                ).images[0]
             
             metadata = {
                 'method': 'object_removal',
@@ -341,10 +500,9 @@ class DiffusionProcessor:
                 'enhanced_prompt': enhanced_prompt,
                 'steps': num_inference_steps,
                 'guidance_scale': guidance_scale,
-                'device': 'hf_api',
+                'device': self.device,
                 'optimized': True,
-                'intelligent_detection': True,
-                'api_mode': 'huggingface_remote'
+                'intelligent_detection': True
             }
             
             return result, metadata
@@ -412,100 +570,59 @@ class DiffusionProcessor:
     
     def background_replacement(self, image: Image.Image, mask: Image.Image,
                              background_prompt: str, **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
-        """Reemplazar fondo manteniendo sujeto principal - EXCLUSIVAMENTE API REMOTA"""
+        """Reemplazar fondo manteniendo sujeto principal"""
         try:
-            # Para reemplazo de fondo usamos el modelo img2img vía API remota
-            model_name = self.model_configs['img2img']['model_name']
-            
-            num_inference_steps = kwargs.get('num_inference_steps', 45)
-            guidance_scale = kwargs.get('guidance_scale', 8.5)
-            
-            # Prompts específicos para reemplazo de fondo
-            enhanced_prompt = f"replace background with {background_prompt}, keep subject unchanged, professional photography"
-            
-            # Codificar imágenes a base64
-            buf_img = io.BytesIO()
-            image.save(buf_img, format='PNG')
-            img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
-
-            buf_mask = io.BytesIO()
-            mask.save(buf_mask, format='PNG')
-            mask_b64 = base64.b64encode(buf_mask.getvalue()).decode('utf-8')
-
-            payload = {
-                'inputs': {
-                    'prompt': enhanced_prompt,
-                    'image': img_b64,
-                    'mask_image': mask_b64
-                },
-                'parameters': {
-                    'num_inference_steps': num_inference_steps,
-                    'guidance_scale': guidance_scale
-                }
-            }
-
-            resp = self._call_hf_api(model_name, payload)
-            result = self._parse_hf_image_response(resp)
-            
-            metadata = {
-                'method': 'background_replacement',
-                'background_prompt': background_prompt,
-                'enhanced_prompt': enhanced_prompt,
-                'steps': num_inference_steps,
-                'guidance_scale': guidance_scale,
-                'device': 'hf_api',
-                'optimized': True,
-                'api_mode': 'huggingface_remote'
-            }
-            
-            return result, metadata
+            return self.inpainting(image, mask, background_prompt, **kwargs)
             
         except Exception as e:
             raise Exception(f"Error en background replacement: {str(e)}")
     
     def intelligent_composition(self, image: Image.Image, elements_prompt: str,
                               **kwargs) -> Tuple[Image.Image, Dict[str, Any]]:
-        """Composición inteligente de elementos - EXCLUSIVAMENTE API REMOTA"""
+        """Composición inteligente de elementos"""
         try:
-            model_name = self.model_configs['img2img']['model_name']
+            pipe = self._get_model('img2img')  # Carga lazy
             
-            strength = kwargs.get('strength', 0.4)
-            num_inference_steps = kwargs.get('num_inference_steps', 25)
-            guidance_scale = kwargs.get('guidance_scale', 7.0)
+            strength = kwargs.get('strength', 0.4)  # Reducido de 0.5
+            num_inference_steps = kwargs.get('num_inference_steps', 25)  # Reducido de 40
+            guidance_scale = kwargs.get('guidance_scale', 7.0)  # Reducido de 8.0
             
-            # Prompts específicos para composición inteligente
-            enhanced_prompt = f"{elements_prompt}, harmonious blend, professional composition, high quality"
-            
-            # Codificar imagen a base64
-            buf_img = io.BytesIO()
-            image.save(buf_img, format='PNG')
-            img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
+            if isinstance(pipe, dict) and pipe.get('remote'):
+                buf_img = io.BytesIO()
+                image.save(buf_img, format='PNG')
+                img_b64 = base64.b64encode(buf_img.getvalue()).decode('utf-8')
 
-            payload = {
-                'inputs': {
-                    'prompt': enhanced_prompt,
-                    'image': img_b64
-                },
-                'parameters': {
-                    'strength': strength,
-                    'num_inference_steps': num_inference_steps,
-                    'guidance_scale': guidance_scale
+                payload = {
+                    'inputs': {
+                        'prompt': elements_prompt,
+                        'image': img_b64
+                    },
+                    'parameters': {
+                        'strength': strength,
+                        'num_inference_steps': num_inference_steps,
+                        'guidance_scale': guidance_scale
+                    }
                 }
-            }
 
-            resp = self._call_hf_api(model_name, payload)
-            result = self._parse_hf_image_response(resp)
+                resp = self._call_hf_api(pipe['model_name'], payload)
+                result = self._parse_hf_image_response(resp)
+            else:
+                result = pipe(
+                    prompt=elements_prompt,
+                    image=image,
+                    strength=strength,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale
+                ).images[0]
             
             metadata = {
                 'method': 'intelligent_composition',
                 'prompt': elements_prompt,
-                'enhanced_prompt': enhanced_prompt,
                 'strength': strength,
                 'steps': num_inference_steps,
                 'guidance_scale': guidance_scale,
-                'device': 'hf_api',
-                'optimized': True,
-                'api_mode': 'huggingface_remote'
+                'device': self.device,
+                'optimized': True
             }
             
             return result, metadata
@@ -514,7 +631,7 @@ class DiffusionProcessor:
             raise Exception(f"Error en intelligent composition: {str(e)}")
     
     def process(self, image: Image.Image, method: str, **kwargs) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
-        """Método principal de procesamiento - EXCLUSIVAMENTE API REMOTA"""
+        """Método principal de procesamiento con optimizaciones"""
         try:
             start_time = time.time()
             
@@ -523,16 +640,18 @@ class DiffusionProcessor:
             image = self._optimize_image_size(image)
             optimized_size = image.size
             
-            print(f"Iniciando procesamiento con método: {method}")
-            print(f"Tamaño original: {original_size}, Optimizado: {optimized_size}")
+            print(f"Iniciando procesamiento con metodo: {method}")
+            print(f"Tamano original: {original_size}, Optimizado: {optimized_size}")
             
             # Remover parámetros que no son argumentos del método específico
             filtered_kwargs = {k: v for k, v in kwargs.items()
                              if k not in ['prompt', 'style_prompt', 'context_prompt', 'background_prompt', 'elements_prompt']}
             
-            # Procesar según método (cada uno usa exclusivamente API remota)
+            # Procesar según método (cada uno usa carga lazy de modelos)
             if method == "inpainting":
-                raise Exception("Inpainting no está disponible. Usa 'Outpainting' o 'Object Removal' como alternativas.")
+                mask = self._create_optimized_mask(image, kwargs, "inpainting")
+                prompt = kwargs.get('prompt', 'natural background')
+                result, metadata = self.inpainting(image, mask, prompt, **filtered_kwargs)
                 
             elif method == "outpainting":
                 extension_factor = kwargs.get('extension_factor', 1.5)
@@ -563,7 +682,7 @@ class DiffusionProcessor:
                 result, metadata = self.intelligent_composition(image, elements_prompt, **filtered_kwargs)
                 
             else:
-                raise ValueError(f"Método no soportado: {method}")
+                raise ValueError(f"Metodo no soportado: {method}")
             
             # Añadir métricas de optimización
             end_time = time.time()
@@ -574,7 +693,7 @@ class DiffusionProcessor:
                 'original_size': original_size,
                 'optimized_size': optimized_size,
                 'memory_optimized': original_size != optimized_size,
-                'api_mode': 'huggingface_remote'
+                'lazy_loading': True
             })
             
             print(f"Procesamiento completado en {processing_time:.2f}s")
@@ -602,7 +721,10 @@ class DiffusionProcessor:
                 )
             else:
                 # Crear máscara por defecto según el método
-                if method_type == "outpainting":
+                if method_type == "inpainting":
+                    mask = self.create_rectangular_mask(width, height, 
+                        width//3, height//3, width//6, height//6)
+                elif method_type == "outpainting":
                     mask_array = np.zeros((height, width), dtype=np.uint8)
                     # Extender proporcionalmente
                     border_size = min(width, height) // 5
@@ -621,20 +743,21 @@ class DiffusionProcessor:
                     center_mask = (x - width//2)**2 + (y - height//2)**2 <= (min(width, height)//3)**2
                     mask_array[center_mask] = 0
                     mask = Image.fromarray(mask_array)
-                else:
-                    # Máscara genérica para otros casos
-                    mask = self.create_rectangular_mask(width, height,
-                        width//3, height//3, width//6, height//6)
         
         return mask
     
+    def _create_object_removal_mask(self, image: Image.Image, kwargs: Dict) -> Image.Image:
+        """Crear máscara específica para eliminación de objetos - método consolidado"""
+        object_description = kwargs.get('object_description', 'object')
+        context_prompt = kwargs.get('context_prompt', 'natural background')
+        return self._create_intelligent_mask(image, object_description, context_prompt)
+    
     def get_info(self) -> Dict[str, Any]:
-        """Obtener información sobre el procesador"""
+        """Obtener información sobre los modelos cargados"""
         return {
-            'device': 'huggingface_api',
-            'api_mode': 'remote_only',
-            'models_available': list(self.model_configs.keys()),
-            'optimized_for_streamlit': True,
-            'memory_usage': 'minimal',
-            'gpu_required': False
+            'device': self.device,
+            'models_loaded': list(self.pipes.keys()),
+            'cuda_available': torch.cuda.is_available(),
+            'lazy_loading_enabled': True,
+            'gpu_optimizations': self.device == 'cuda'
         }

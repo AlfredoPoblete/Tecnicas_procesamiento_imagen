@@ -2,7 +2,7 @@
 Utilidades de Interfaz de Usuario
 Componentes reutilizables para la interfaz Streamlit
 
-Implementa el diseño específico solicitado - SIN INPAINTING
+Implementa el diseño específico solicitado
 """
 
 import streamlit as st
@@ -15,6 +15,12 @@ class UIHelper:
     
     def __init__(self):
         self.processing_methods = {
+            "Inpainting (Eliminar objetos)": {
+                "key": "inpainting",
+                "description": "Elimina y rellena objetos no deseados",
+                "icon": "🖼️",
+                "use_case": "Remover elementos indeseados de fotos"
+            },
             "Outpainting (Extender imagen)": {
                 "key": "outpainting", 
                 "description": "Extiende la imagen más allá de sus bordes",
@@ -51,7 +57,44 @@ class UIHelper:
         """Obtener parámetros para el método de procesamiento seleccionado"""
         params = {}
         
-        if "Outpainting" in method:
+        if "Inpainting" in method:
+            params.update({
+                'prompt': st.text_input(
+                    "Prompt para el relleno", 
+                    value="natural background texture",
+                    help="Describe qué quieres que aparezca en el área eliminada"
+                ),
+                'num_inference_steps': st.slider(
+                    "Pasos de procesamiento", 
+                    min_value=20, max_value=100, value=30,
+                    help="Más pasos = mejor calidad pero más lento"
+                ),
+                'guidance_scale': st.slider(
+                    "Control de adherencia al prompt", 
+                    min_value=5.0, max_value=15.0, value=7.5, step=0.5,
+                    help="Qué tan fuerte seguir la descripción"
+                )
+            })
+            
+            # Crear máscara interactiva
+            st.subheader("🎯 Configuración de Máscara")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                x = st.number_input("Posición X", min_value=0, max_value=512, value=200)
+                y = st.number_input("Posición Y", min_value=0, max_value=512, value=200)
+            
+            with col2:
+                width = st.number_input("Ancho", min_value=10, max_value=512, value=100)
+                height = st.number_input("Alto", min_value=10, max_value=512, value=100)
+            
+            # Crear máscara
+            from utils.image_utils import ImageProcessor
+            processor = ImageProcessor()
+            # Retornar coordenadas para crear máscara en el procesador
+            params['mask_coords'] = (x, y, x + width, y + height)
+            
+        elif "Outpainting" in method:
             params.update({
                 'extension_factor': st.slider(
                     "Factor de extensión",
@@ -210,8 +253,15 @@ class UIHelper:
             st.write(info['description'])
             st.write(f"**Caso de uso:** {info['use_case']}")
             
-            # Mostrar consejos específicos (sin inpainting)
-            if "Outpainting" in method:
+            # Mostrar consejos específicos
+            if "Inpainting" in method:
+                st.info("""
+                **Consejos para mejores resultados:**
+                - Usa prompts descriptivos del contexto
+                - Ajusta la máscara para cubrir exactamente el área
+                - Más pasos mejoran la integración natural
+                """)
+            elif "Outpainting" in method:
                 st.info("""
                 **Consejos para outpainting:**
                 - Describe coherentemente el contexto extendido
@@ -223,27 +273,21 @@ class UIHelper:
                 **Consejos para style transfer:**
                 - Ajusta la intensidad según el efecto deseado
                 - Experimenta con diferentes estilos
-                - Estilos sutiles mantienen más del original
+                - Estilos más sutiles mantienen más del original
                 """)
     
     def render_processing_status(self, status_info: Dict[str, Any]):
         """Renderizar estado del procesamiento"""
         if 'device' in status_info:
             device = status_info['device']
-            if device == 'huggingface_api':
-                st.success(f"🚀 API remota activa - Procesamiento en la nube")
-            elif device == 'cuda':
+            if device == 'cuda':
                 st.success(f"🚀 GPU disponible - Procesamiento acelerado")
             else:
-                st.warning(f"⚠️ CPU solamente - El procesamiento será más lento")
+                st.warning("⚠️ CPU solamente - El procesamiento será más lento")
         
         if 'models_loaded' in status_info:
             models = status_info['models_loaded']
             st.write(f"**Modelos cargados:** {', '.join(models)}")
-        
-        # Mostrar información específica de API remota
-        if 'api_mode' in status_info and status_info['api_mode'] == 'remote_only':
-            st.info("☁️ Modo API remota - Sin descarga de modelos locales")
     
     def create_comparison_view(self, original: Image.Image, processed: Image.Image, 
                              title: str = "Comparación Original vs Procesada"):
@@ -290,7 +334,7 @@ class UIHelper:
                 st.write(f"{i}. {rec}")
     
     def render_user_guide(self):
-        """Renderizar guía de usuario específica (sin inpainting)"""
+        """Renderizar guía de usuario específica"""
         st.sidebar.markdown("---")
         st.sidebar.subheader("🎮 Guía para Desarrolladores de Videojuegos")
         
@@ -300,7 +344,7 @@ class UIHelper:
         **Para Concept Artists:**
         - **Outpainting**: Expandir bocetos para mundos más grandes
         - **Style Transfer**: Unificar estilos en portfolios
-        - **Object Removal**: Limpiar sketches rápidamente
+        - **Inpainting**: Limpiar sketches rápidamente
         
         **Para Desarrolladores de Juegos:**
         - **Background Replacement**: Cambiar contextos de sprites
@@ -327,7 +371,7 @@ class UIHelper:
         
         st.sidebar.markdown("""
         **Optimización de rendimiento:**
-        - API remota: 10-30 segundos por imagen
+        - GPU: 10-30 segundos por imagen
         - CPU: 1-5 minutos por imagen
         - Imágenes 512x512: velocidad óptima
         
@@ -342,16 +386,17 @@ class UIHelper:
         - No sigue el prompt: Aumentar guidance scale
         - Artefactos: Reducir strength (img2img)
         - Muy lento: Reducir resolución
-        
-        **API Remota (Streamlit Cloud):**
-        - Sin descarga de modelos locales
-        - Procesamiento en la nube
-        - Token de Hugging Face requerido
         """)
     
     def get_method_tips(self, method: str) -> List[str]:
-        """Obtener consejos específicos para cada método (sin inpainting)"""
+        """Obtener consejos específicos para cada método"""
         tips = {
+            "Inpainting": [
+                "Usa prompts descriptivos del contexto local",
+                "Ajusta la máscara para cubrir exactamente el área",
+                "Más pasos mejoran la integración natural",
+                "Experimenta con diferentes fondos"
+            ],
             "Outpainting": [
                 "Describe coherentemente el contexto extendido",
                 "Usa prompts que incluyan la continuación natural",

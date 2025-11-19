@@ -1,6 +1,6 @@
 """
-Aplicación de Edición Generativa de Imágenes - Versión Final Optimizada para Streamlit Cloud
-Tema oscuro con interfaz optimizada, uso exclusivo de Hugging Face API y función inpainting deshabilitada
+Aplicación de Edición Generativa de Imágenes - Versión Final Simplificada
+Tema oscuro con interfaz optimizada, carga lazy de modelos y API Key desde .env
 
 Procesamiento Digital de Imágenes - IFTS24
 """
@@ -181,10 +181,10 @@ def configure_page():
     load_css()
 
 class ImageEditingApp:
-    """Aplicación principal para edición generativa de imágenes - Versión Final Optimizada"""
+    """Aplicación principal para edición generativa de imágenes - Versión Final Simplificada"""
     
     def __init__(self):
-        # Usar el modelo optimizado para Streamlit Cloud
+        # Usar el modelo optimizado
         self.diffusion_processor = DiffusionProcessor()
         self.analyzer = GeminiAnalyzer()
         self.image_processor = ImageProcessor()
@@ -238,7 +238,7 @@ class ImageEditingApp:
             return None
     
     def process_image(self, image: Image.Image, method: str, **kwargs) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
-        """Procesar imagen usando modelos de difusión optimizados para Streamlit Cloud"""
+        """Procesar imagen usando modelos de difusión optimizados"""
         try:
             with st.spinner(f'🚀 Procesando imagen con {method}...'):
                 result, metadata = self.diffusion_processor.process(
@@ -269,8 +269,9 @@ class ImageEditingApp:
             steps = processing_info.get('steps', 'N/A')
             guidance_scale = processing_info.get('guidance_scale', 'N/A')
             
-            # Crear descripción específica basada en la técnica aplicada (sin inpainting)
+            # Crear descripción específica basada en la técnica aplicada
             method_descriptions = {
+                "inpainting": "técnica de inpainting (eliminación y relleno inteligente de objetos)",
                 "outpainting": "técnica de outpainting (extensión de imagen más allá de sus bordes)",
                 "style_transfer": "técnica de transferencia de estilo artístico",
                 "object_removal": "técnica de eliminación específica de objetos",
@@ -301,10 +302,9 @@ class ImageEditingApp:
                     'tecnica_aplicada': method_description,
                     'pasos_procesamiento': steps,
                     'guidance_scale': guidance_scale,
-                    'device_used': processing_info.get('device', 'HuggingFace API'),
+                    'device_used': processing_info.get('device', 'CPU/GPU'),
                     'optimized': processing_info.get('optimized', False),
-                    'processing_time': processing_info.get('processing_time', 'N/A'),
-                    'api_mode': 'huggingface_remote'
+                    'processing_time': processing_info.get('processing_time', 'N/A')
                 }
                 
                 # Si es análisis comparativo, agregar información específica
@@ -331,7 +331,7 @@ class ImageEditingApp:
                 <ol>
                     <li><strong>Prepará tu imagen</strong> en formato JPG o PNG</li>
                     <li><strong>Subí la imagen</strong> usando el botón de carga</li>
-                    <li><strong>Elegí el método</strong> de procesamiento (sin inpainting)</li>
+                    <li><strong>Elegí el método</strong> de procesamiento</li>
                     <li><strong>Ajustá los parámetros</strong> según el resultado deseado</li>
                     <li><strong>Procesá la imagen</strong> y analizá los resultados</li>
                     <li><strong>Iterá</strong> si es necesario para mejorar el resultado</li>
@@ -345,7 +345,7 @@ class ImageEditingApp:
                 </ul>
                 
                 <h4>🔑 API Configuration:</h4>
-                <p>Optimizado para Streamlit Cloud con API remota</p>
+                <p>La API key de Gemini se configura automáticamente desde el archivo .env</p>
                 </div>
                 """, 
                 unsafe_allow_html=True
@@ -362,38 +362,33 @@ class ImageEditingApp:
             
             st.markdown('<hr style="border-color: #7E57C2; margin: 2rem 0;">', unsafe_allow_html=True)
             
-            # Información de rendimiento optimizada para Streamlit Cloud
+            # Información de rendimiento
             st.markdown('<h3 style="color: white;">⚡ Estado del Sistema</h3>', unsafe_allow_html=True)
             
-            info = self.diffusion_processor.get_info()
-            device = info.get('device', 'unknown')
-            
-            if device == 'huggingface_api':
-                st.success("🚀 API remota activa - Procesamiento en la nube")
-            elif device == 'cuda':
-                st.success("🚀 GPU disponible - Procesamiento acelerado")
-            else:
-                st.warning("🖥️ CPU solamente - El procesamiento será más lento")
-            
-            lazy_loading = info.get('lazy_loading_enabled', False)
-            if lazy_loading:
-                st.info("⚡ Carga lazy habilitada - Inicialización rápida")
-            
-            # Mostrar modo de API
-            if info.get('api_mode') == 'remote_only':
-                st.info("☁️ Modo API remota - Sin descarga de modelos locales")
+            if hasattr(self.diffusion_processor, 'get_info'):
+                info = self.diffusion_processor.get_info()
+                device = info.get('device', 'unknown')
+                
+                if device == 'cuda':
+                    st.success("🚀 GPU disponible - Procesamiento acelerado")
+                else:
+                    st.warning("🖥️ CPU solamente - El procesamiento será más lento")
+                
+                lazy_loading = info.get('lazy_loading_enabled', False)
+                if lazy_loading:
+                    st.info("⚡ Carga lazy habilitada - Inicialización rápida")
             
             st.markdown('<hr style="border-color: #7E57C2; margin: 2rem 0;">', unsafe_allow_html=True)
             
-            # Tecnologías utilizadas (actualizadas)
+            # Tecnologías utilizadas
             st.markdown('<h3 style="color: white;">🔧 Tecnologías Utilizadas</h3>', unsafe_allow_html=True)
             
             technologies = [
-                ("Modelos de Difusión", "Stable Diffusion via HF API"),
+                ("Modelos de Difusión", "Stable Diffusion, ControlNet"),
                 ("Análisis Visual", "Gemini 2.0"),
                 ("Interfaz", "Streamlit"),
                 ("Procesamiento", "PIL, NumPy"),
-                ("Optimización", "API Remota, Sin descarga local")
+                ("Optimización", "Carga Lazy, GPU Acelerada")
             ]
             
             for tech_name, tech_desc in technologies:
@@ -407,7 +402,7 @@ class ImageEditingApp:
                 """, unsafe_allow_html=True)
     
     def render_header(self):
-        """Renderizar encabezado principal con capacidades (sin inpainting)"""
+        """Renderizar encabezado principal con capacidades"""
         st.markdown(
             '<h1 class="main-header fade-in">🎨 Edición Generativa de Imágenes</h1>',
             unsafe_allow_html=True
@@ -417,7 +412,7 @@ class ImageEditingApp:
             """
             <div style="text-align: center; color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 2rem;">
                 Plataforma avanzada que integra las últimas tecnologías de IA para ofrecer capacidades
-                de edición generativa: <span style="color: var(--accent-purple); font-weight: 500;">Outpainting</span>,
+                de edición generativa: <span style="color: var(--accent-purple); font-weight: 500;">Inpainting</span>,
                 <span style="color: var(--accent-purple); font-weight: 500;">Style Transfer</span>,
                 <span style="color: var(--accent-purple); font-weight: 500;">Object Removal</span>
                 y análisis inteligente con Gemini 2.0
@@ -426,12 +421,16 @@ class ImageEditingApp:
             unsafe_allow_html=True
         )
         
-        # Capacidades principales (sin inpainting)
+        # Capacidades principales
         st.markdown(
             """
             <div style="text-align: center; margin-bottom: 2rem;">
                 <h3 style="color: var(--accent-purple); margin-bottom: 1rem;">Capacidades principales:</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; max-width: 800px; margin: 0 auto;">
+                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
+                        <div style="color: var(--accent-purple); font-size: 1.5rem;">🖼️</div>
+                        <strong>Inpainting:</strong> Eliminar y rellenar objetos de forma inteligente
+                    </div>
                     <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
                         <div style="color: var(--accent-purple); font-size: 1.5rem;">🔄</div>
                         <strong>Outpainting:</strong> Extender imágenes más allá de sus bordes
@@ -451,10 +450,6 @@ class ImageEditingApp:
                     <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
                         <div style="color: var(--accent-purple); font-size: 1.5rem;">🧠</div>
                         <strong>Análisis Inteligente:</strong> Análisis visual con Gemini 2.0
-                    </div>
-                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
-                        <div style="color: var(--accent-purple); font-size: 1.5rem;">🧩</div>
-                        <strong>Composición Inteligente:</strong> Combinar elementos múltiples
                     </div>
                 </div>
             </div>
@@ -533,7 +528,7 @@ class ImageEditingApp:
                 )
     
     def render_processing_section(self):
-        """Renderizar sección de procesamiento (sin inpainting)"""
+        """Renderizar sección de procesamiento"""
         if 'original_image' not in st.session_state:
             return
         
@@ -542,10 +537,11 @@ class ImageEditingApp:
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            # Selector de método (SIN inpainting)
+            # Selector de método
             processing_method = st.selectbox(
                 "Selecciona el método de procesamiento",
                 [
+                    "Inpainting (Eliminar objetos)",
                     "Outpainting (Extender imagen)", 
                     "Style Transfer (Transferir estilo)",
                     "Object Removal (Eliminar objeto específico)",
@@ -560,37 +556,23 @@ class ImageEditingApp:
             
             # Botón de procesamiento
             if st.button("🚀 Procesar Imagen", key="process_button", type="primary"):
-                # Mapear métodos (SIN inpainting)
+                # Mapear métodos
                 method_mapping = {
+                    "inpainting": "inpainting",
                     "outpainting": "outpainting", 
                     "style transfer": "style_transfer",
                     "object removal": "object_removal",
                     "background replacement": "background_replacement",
                     "composición inteligente": "intelligent_composition"
                 }
-
+                
                 method_key = processing_method.split(' (')[0].lower()
                 if method_key in method_mapping:
                     method_key = method_mapping[method_key]
                 else:
                     method_key = method_key.replace(' ', '_')
-
-                # Depuración: mostrar método y parámetros antes de procesar
-                try:
-                    st.info(f"Procesando con método: {method_key}")
-                    st.write({"method_key": method_key, "params_preview": {k: (v if not hasattr(v, 'read') else 'file') for k, v in params.items()}})
-                except Exception:
-                    # Fallback silencioso si st.write falla por valores complejos
-                    pass
-
-                try:
-                    result, metadata = self.process_image(st.session_state['original_image'], method_key, **params)
-                except Exception as e:
-                    # Mostrar excepción para diagnóstico
-                    import traceback
-                    traceback.print_exc()
-                    st.error(f"Excepción durante el llamado al procesador: {e}")
-                    result, metadata = None, {}
+                
+                result, metadata = self.process_image(st.session_state['original_image'], method_key, **params)
                 
                 if result:
                     st.session_state['processed_image'] = result
@@ -631,7 +613,7 @@ class ImageEditingApp:
                 st.image(processed_resized, width=400)
             else:
                 st.markdown(
-                    '<div style="background: var(--card-bg); border: 2px dashed var(--border); border-radius: 8px; padding: 2rem; text-align: center; color: var(--text-secondary);">Procesa una imagen para ver la comparación</div>',
+                    '<div style="background: var(--card-bg); border: 2px dashed var(--card-border); border-radius: 8px; padding: 2rem; text-align: center; color: var(--text-secondary);">Procesa una imagen para ver la comparación</div>',
                     unsafe_allow_html=True
                 )
     
@@ -663,8 +645,9 @@ class ImageEditingApp:
                         processing_info = st.session_state.get('processing_metadata', {})
                         method = processing_info.get('method', 'Desconocida')
                         
-                        # Prompt detallado basado en el método aplicado (sin inpainting)
+                        # Prompt detallado basado en el método aplicado
                         method_descriptions = {
+                            "inpainting": "eliminación y relleno inteligente de objetos",
                             "outpainting": "extensión de imagen más allá de sus bordes",
                             "style_transfer": "transferencia de estilo artístico",
                             "object_removal": "eliminación específica de objetos",
@@ -763,11 +746,10 @@ class ImageEditingApp:
         # Footer
         st.markdown(
             """
-            <div style="text-align: center; margin-top: 3rem; padding: 2rem; border-top: 1px solid var(--border);">
+            <div style="text-align: center; margin-top: 3rem; padding: 2rem; border-top: 1px solid var(--card-border);">
                 <div style="color: var(--text-secondary);">
                     💻 Procesamiento Digital de Imágenes - IFTS24<br>
-                    ⚡ Alfredo Poblete - 2025<br>
-                    ☁️ Optimizado para Streamlit Cloud con API remota
+                    ⚡ Alfredo Poblete - 2025
                 </div>
             </div>
             """,
