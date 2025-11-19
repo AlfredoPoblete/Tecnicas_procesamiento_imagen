@@ -33,7 +33,6 @@ requests>=2.31.0
 python-dotenv>=0.21.0
 pyyaml>=6.0.0
 tqdm>=4.66.0
-huggingface_hub>=0.18.1
 
 # Métricas de calidad de imagen
 seaborn>=0.12.0

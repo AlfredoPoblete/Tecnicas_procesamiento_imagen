@@ -1,8 +1,8 @@
 """
-Utilidades de Interfaz de Usuario - Versión Optimizada
+Utilidades de Interfaz de Usuario
 Componentes reutilizables para la interfaz Streamlit
 
-Implementa el diseño específico solicitado SIN función Inpainting
+Implementa el diseño específico solicitado
 """
 
 import streamlit as st
@@ -11,10 +11,16 @@ from PIL import Image
 import numpy as np
 
 class UIHelper:
-    """Helper para componentes de UI reutilizables - Versión optimizada sin Inpainting"""
+    """Helper para componentes de UI reutilizables"""
     
     def __init__(self):
         self.processing_methods = {
+            "Inpainting (Eliminar objetos)": {
+                "key": "inpainting",
+                "description": "Elimina y rellena objetos no deseados",
+                "icon": "🖼️",
+                "use_case": "Remover elementos indeseados de fotos"
+            },
             "Outpainting (Extender imagen)": {
                 "key": "outpainting", 
                 "description": "Extiende la imagen más allá de sus bordes",
@@ -26,6 +32,12 @@ class UIHelper:
                 "description": "Aplica estilos artísticos a la imagen",
                 "icon": "🎭",
                 "use_case": "Cambiar estilo visual manteniendo contenido"
+            },
+            "Object Removal (Eliminar objeto específico)": {
+                "key": "object_removal",
+                "description": "Elimina objetos específicos con precisión",
+                "icon": "🗑️",
+                "use_case": "Limpieza precisa de elementos"
             },
             "Background Replacement (Cambiar fondo)": {
                 "key": "background_replacement", 
@@ -42,10 +54,47 @@ class UIHelper:
         }
     
     def get_processing_params(self, method: str) -> Dict[str, Any]:
-        """Obtener parámetros optimizados para el método de procesamiento seleccionado"""
+        """Obtener parámetros para el método de procesamiento seleccionado"""
         params = {}
         
-        if "Outpainting" in method:
+        if "Inpainting" in method:
+            params.update({
+                'prompt': st.text_input(
+                    "Prompt para el relleno", 
+                    value="natural background texture",
+                    help="Describe qué quieres que aparezca en el área eliminada"
+                ),
+                'num_inference_steps': st.slider(
+                    "Pasos de procesamiento", 
+                    min_value=20, max_value=100, value=30,
+                    help="Más pasos = mejor calidad pero más lento"
+                ),
+                'guidance_scale': st.slider(
+                    "Control de adherencia al prompt", 
+                    min_value=5.0, max_value=15.0, value=7.5, step=0.5,
+                    help="Qué tan fuerte seguir la descripción"
+                )
+            })
+            
+            # Crear máscara interactiva
+            st.subheader("🎯 Configuración de Máscara")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                x = st.number_input("Posición X", min_value=0, max_value=512, value=200)
+                y = st.number_input("Posición Y", min_value=0, max_value=512, value=200)
+            
+            with col2:
+                width = st.number_input("Ancho", min_value=10, max_value=512, value=100)
+                height = st.number_input("Alto", min_value=10, max_value=512, value=100)
+            
+            # Crear máscara
+            from utils.image_utils import ImageProcessor
+            processor = ImageProcessor()
+            # Retornar coordenadas para crear máscara en el procesador
+            params['mask_coords'] = (x, y, x + width, y + height)
+            
+        elif "Outpainting" in method:
             params.update({
                 'extension_factor': st.slider(
                     "Factor de extensión",
@@ -59,7 +108,7 @@ class UIHelper:
                 ),
                 'num_inference_steps': st.slider(
                     "Pasos de procesamiento",
-                    min_value=30, max_value=120, value=50,  # Aumentado para mejor calidad
+                    min_value=30, max_value=150, value=45,
                     help="Outpainting requiere más pasos para mejor calidad"
                 ),
                 'guidance_scale': st.slider(
@@ -77,10 +126,7 @@ class UIHelper:
                 "sketch/pencil drawing",
                 "vintage sepia style",
                 "modern digital art",
-                "impressionist style",
-                "cyberpunk neon style",
-                "renaissance painting",
-                "minimalist design"
+                "impressionist style"
             ]
             
             params.update({
@@ -105,7 +151,36 @@ class UIHelper:
                 )
             })
             
-        # Note: Object Removal / Inpainting fue eliminado por requerimiento.
+        elif "Object Removal" in method:
+            params.update({
+                'object_description': st.text_input(
+                    "Objeto a eliminar",
+                    value="unwanted object",
+                    help="Describe específicamente el objeto que quieres eliminar (ej: 'persona en la izquierda', 'carro rojo', 'señal de tránsito')"
+                ),
+                'context_prompt': st.text_input(
+                    "Contexto del fondo",
+                    value="natural seamless background",
+                    help="Describe el fondo natural que debe aparecer"
+                ),
+                'num_inference_steps': st.slider(
+                    "Pasos de procesamiento",
+                    min_value=30, max_value=80, value=45
+                ),
+                'guidance_scale': st.slider(
+                    "Control de adherencia",
+                    min_value=7.0, max_value=15.0, value=9.0, step=0.5
+                )
+            })
+            
+            # Información para el usuario
+            st.info("""
+            **Object Removal Inteligente:**
+            1. Describe el objeto que quieres eliminar
+            2. Especifica cómo debe verse el fondo
+            3. El sistema detectará automáticamente el objeto y lo eliminará
+            4. No necesitas especificar posiciones manualmente
+            """)
             
         elif "Background Replacement" in method:
             background_options = [
@@ -116,11 +191,7 @@ class UIHelper:
                 "mountain vista",
                 "studio photography backdrop",
                 "abstract colorful background",
-                "cozy indoor environment",
-                "space nebula",
-                "futuristic cyberpunk city",
-                "ancient castle",
-                "tropical paradise"
+                "cozy indoor environment"
             ]
             
             params.update({
@@ -147,9 +218,7 @@ class UIHelper:
                 "creative collage style",
                 "seamless blending",
                 "layered depth composition",
-                "abstract creative arrangement",
-                "cinematic scene composition",
-                "surreal artistic composition"
+                "abstract creative arrangement"
             ]
             
             params.update({
@@ -184,46 +253,27 @@ class UIHelper:
             st.write(info['description'])
             st.write(f"**Caso de uso:** {info['use_case']}")
             
-            # Mostrar consejos específicos (sin Inpainting)
-            if "Outpainting" in method:
+            # Mostrar consejos específicos
+            if "Inpainting" in method:
+                st.info("""
+                **Consejos para mejores resultados:**
+                - Usa prompts descriptivos del contexto
+                - Ajusta la máscara para cubrir exactamente el área
+                - Más pasos mejoran la integración natural
+                """)
+            elif "Outpainting" in method:
                 st.info("""
                 **Consejos para outpainting:**
                 - Describe coherentemente el contexto extendido
                 - Esta técnica requiere más procesamiento
                 - Ideal para escenarios y fondos amplios
-                - Usa factores de extensión moderados (1.2-1.8)
                 """)
             elif "Style Transfer" in method:
                 st.info("""
                 **Consejos para style transfer:**
                 - Ajusta la intensidad según el efecto deseado
-                - Estilos sutiles mantienen más del original
-                - Experimenta con diferentes estilos artísticos
-                - Para máximo impacto usa strength > 0.7
-                """)
-            elif "Object Removal" in method:
-                st.info("""
-                **Consejos para object removal:**
-                - Selecciona el tipo de objeto específico
-                - Especifica el contexto del fondo deseado
-                - Detección automática de la ubicación
-                - Usa guidance scale alto (8.0-9.5) para mejor adherencia
-                """)
-            elif "Background Replacement" in method:
-                st.info("""
-                **Consejos para background replacement:**
-                - Selecciona fondos compatibles con el sujeto
-                - Ajusta la iluminación si es necesario
-                - Considera la perspectiva y escala
-                - Usa prompts descriptivos del nuevo ambiente
-                """)
-            elif "Composición" in method:
-                st.info("""
-                **Consejos para composición inteligente:**
-                - Define claramente qué elementos combinar
-                - Usa prompts que sugieran armonía visual
-                - Strength controla la intensidad de cambios
-                - Experimenta con diferentes estilos de composición
+                - Experimenta con diferentes estilos
+                - Estilos más sutiles mantienen más del original
                 """)
     
     def render_processing_status(self, status_info: Dict[str, Any]):
@@ -294,17 +344,17 @@ class UIHelper:
         **Para Concept Artists:**
         - **Outpainting**: Expandir bocetos para mundos más grandes
         - **Style Transfer**: Unificar estilos en portfolios
-        - **Composición**: Crear environments complejos
+        - **Inpainting**: Limpiar sketches rápidamente
         
         **Para Desarrolladores de Juegos:**
         - **Background Replacement**: Cambiar contextos de sprites
         - **Object Removal**: Limpiar assets de recursos no deseados
-        - **Style Transfer**: Adaptar assets a diferentes estilos
+        - **Composición**: Crear environments complejos
         
         ### ⚙️ Configuraciones recomendadas:
         
         **Para velocidad (desarrollo rápido):**
-        - Steps: 20-30
+        - Steps: 20-25
         - Guidance Scale: 6-7
         
         **Para calidad máxima (assets finales):**
@@ -339,25 +389,29 @@ class UIHelper:
         """)
     
     def get_method_tips(self, method: str) -> List[str]:
-        """Obtener consejos específicos para cada método (sin Inpainting)"""
+        """Obtener consejos específicos para cada método"""
         tips = {
+            "Inpainting": [
+                "Usa prompts descriptivos del contexto local",
+                "Ajusta la máscara para cubrir exactamente el área",
+                "Más pasos mejoran la integración natural",
+                "Experimenta con diferentes fondos"
+            ],
             "Outpainting": [
                 "Describe coherentemente el contexto extendido",
                 "Usa prompts que incluyan la continuación natural",
-                "Esta técnica requiere más procesamiento (50+ steps)",
-                "Ideal para expandir landscapes y fondos",
-                "Factores de extensión moderados dan mejores resultados"
+                "Esta técnica requiere más procesamiento",
+                "Ideal para expandir landscapes y fondos"
             ],
             "Style Transfer": [
                 "Ajusta strength según el efecto deseado",
                 "Estilos sutiles mantienen más del original",
                 "Experimenta con diferentes estilos artísticos",
-                "Para máximo impacto usa strength > 0.7",
-                "Combina guidance scale alto con strength medio-alto"
+                "Para máximo impacto usa strength > 0.7"
             ],
             "Object Removal": [
-                "Selecciona el tipo específico de objeto",
-                "Usa términos claros (person, carro, edificio, etc.)",
+                "Describe específicamente el objeto que quieres eliminar",
+                "Usa términos claros (persona, carro, edificio, etc.)",
                 "Especifica el contexto del fondo deseado",
                 "Detección automática de la ubicación del objeto",
                 "Usa guidance scale alto (8.0-9.5) para mejor adherencia",
@@ -367,15 +421,13 @@ class UIHelper:
                 "Selecciona fondos compatibles con el sujeto",
                 "Ajusta la iluminación si es necesario",
                 "Considera la perspectiva y escala",
-                "Usa prompts descriptivos del nuevo ambiente",
-                "Backgrounds más simples suelen funcionar mejor"
+                "Usa prompts descriptivos del nuevo ambiente"
             ],
             "Composición": [
                 "Define claramente qué elementos combinar",
                 "Usa prompts que sugieran armonía visual",
                 "Strength controla la intensidad de cambios",
-                "Experimenta con diferentes estilos de composición",
-                "Composición sutil preserva mejor el contenido original"
+                "Experimenta con diferentes estilos de composición"
             ]
         }
         
@@ -384,38 +436,3 @@ class UIHelper:
                 return method_tips
         
         return ["Usa parámetros moderados como punto de partida"]
-
-    def get_optimized_default_params(self, method: str) -> Dict[str, Any]:
-        """Obtener parámetros optimizados por defecto para cada método"""
-        defaults = {
-            "Outpainting": {
-                'extension_factor': 1.5,
-                'prompt': 'seamless natural extension, matching the existing scene',
-                'num_inference_steps': 50,
-                'guidance_scale': 8.5
-            },
-            "Style Transfer": {
-                'style_prompt': 'artistic painting style',
-                'strength': 0.6,
-                'num_inference_steps': 35,
-                'guidance_scale': 7.5
-            },
-            # Object Removal eliminado
-            "Background Replacement": {
-                'background_prompt': 'beautiful sunset landscape',
-                'num_inference_steps': 45,
-                'guidance_scale': 8.5
-            },
-            "Composición Inteligente": {
-                'elements_prompt': 'harmonious artistic composition',
-                'strength': 0.5,
-                'num_inference_steps': 40,
-                'guidance_scale': 8.0
-            }
-        }
-        
-        for method_key, method_defaults in defaults.items():
-            if method_key in method:
-                return method_defaults.copy()
-        
-        return {}  # Parámetros vacíos si no se encuentra el método

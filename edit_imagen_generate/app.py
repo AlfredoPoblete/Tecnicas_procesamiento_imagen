@@ -1,11 +1,8 @@
 """
-Aplicación de Edición Generativa de Imágenes - Versión Optimizada
+Aplicación de Edición Generativa de Imágenes - Versión Final Simplificada
 Tema oscuro con interfaz optimizada, carga lazy de modelos y API Key desde .env
 
 Procesamiento Digital de Imágenes - IFTS24
-- Eliminada función Inpainting
-- Optimizada galería de ejemplos con miniaturas
-- Funciones restantes optimizadas y mejoradas
 """
 
 import streamlit as st
@@ -157,42 +154,6 @@ def load_css():
             border: 1px solid var(--purple);
         }
         
-        /* Galería de ejemplos optimizada */
-        .example-container {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1rem;
-            margin: 0.5rem 0;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .example-container:hover {
-            border-color: var(--purple);
-            background: rgba(187, 134, 252, 0.1);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(187, 134, 252, 0.3);
-        }
-        
-        .example-image {
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            transition: transform 0.3s ease;
-        }
-        
-        .example-container:hover .example-image {
-            transform: scale(1.05);
-        }
-        
-        .example-title {
-            color: var(--purple);
-            font-weight: 600;
-            text-align: center;
-            margin-top: 0.5rem;
-            font-size: 0.9rem;
-        }
-        
         /* Animaciones */
         .fade-in { animation: fadeIn 0.5s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -201,7 +162,6 @@ def load_css():
         @media (max-width: 768px) {
             .main-header { font-size: 2rem; }
             .block-container { padding-top: 1rem; }
-            .example-image { max-width: 120px; }
         }
         </style>
         """,
@@ -221,18 +181,29 @@ def configure_page():
     load_css()
 
 class ImageEditingApp:
-    """Aplicación principal para edición generativa de imágenes - Versión Optimizada"""
+    """Aplicación principal para edición generativa de imágenes - Versión OPTIMIZADA para Streamlit"""
     
     def __init__(self):
-        # Usar el modelo optimizado
-        self.diffusion_processor = DiffusionProcessor()
-        self.analyzer = GeminiAnalyzer()
-        self.image_processor = ImageProcessor()
-        self.ui_helper = UIHelper()
+        # Configuración de optimizaciones
+        self.streamlit_mode = os.getenv('STREAMLIT_APP', 'false').lower() == 'true'
+        self.use_hf_api = os.getenv('USE_HF_API', 'false').lower() == 'true'
+        
+        # Inicializar con indicador de carga
+        with st.spinner("🚀 Inicializando optimizaciones para Streamlit..."):
+            # Usar el modelo optimizado
+            self.diffusion_processor = DiffusionProcessor()
+            self.analyzer = GeminiAnalyzer()
+            self.image_processor = ImageProcessor()
+            self.ui_helper = UIHelper()
         
         # Configurar variables de estado
         if 'analysis_results' not in st.session_state:
             st.session_state['analysis_results'] = {}
+        
+        # Configurar estado de optimización
+        st.session_state['optimization_enabled'] = True
+        st.session_state['lightweight_mode'] = True
+        st.session_state['api_mode'] = self.use_hf_api
     
     def resize_images_to_same_size(self, img1: Image.Image, img2: Image.Image, target_width: int = 400) -> Tuple[Image.Image, Image.Image]:
         """Redimensionar dos imágenes para que tengan exactamente el mismo tamaño manteniendo proporciones"""
@@ -265,7 +236,7 @@ class ImageEditingApp:
         canvas2.paste(img2_resized, (0, y_offset2))
         
         return canvas1, canvas2
-    
+        
     def load_image(self, uploaded_file) -> Optional[Image.Image]:
         """Cargar imagen desde archivo subido"""
         try:
@@ -278,36 +249,55 @@ class ImageEditingApp:
             return None
     
     def process_image(self, image: Image.Image, method: str, **kwargs) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
-        """Procesar imagen usando modelos de difusión optimizados con mejor manejo de errores"""
+        """Procesar imagen usando modelos de difusión optimizados para Streamlit"""
         try:
-            # Mostrar progreso detallado
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            # Mostrar progreso específico para cada método
+            method_descriptions = {
+                "inpainting": "🎯 Inpainting: Eliminando y rellenando objetos...",
+                "outpainting": "🔄 Outpainting: Extendiendo imagen...",
+                "style_transfer": "🎨 Style Transfer: Aplicando estilo artístico...",
+                "object_removal": "🗑️ Object Removal: Eliminando objetos...",
+                "background_replacement": "🖼️ Background: Cambiando fondo...",
+                "intelligent_composition": "🧩 Composición: Creando composición inteligente..."
+            }
             
-            status_text.text('Inicializando procesador...')
-            progress_bar.progress(10)
+            description = method_descriptions.get(method, f'🚀 Procesando imagen con {method}...')
             
-            with st.spinner(f'🚀 Procesando imagen con {method}...'):
-                # Llamar al procesamiento con mejor manejo de errores
+            # Spinner con mensaje específico
+            with st.spinner(description):
+                # Verificar si usar API de Hugging Face
+                if hasattr(self, 'use_hf_api') and self.use_hf_api:
+                    st.info("🌐 Usando API de Hugging Face (sin carga de modelos locales)")
+                
+                # Mostrar configuración optimizada
+                if method in ['inpainting', 'outpainting']:
+                    steps = kwargs.get('num_inference_steps', 20)
+                    st.info(f"⚡ Modo optimizado: {steps} pasos (reducido para velocidad)")
+                
                 result, metadata = self.diffusion_processor.process(
                     image=image,
                     method=method,
                     **kwargs
                 )
                 
-                progress_bar.progress(100)
-                status_text.text('¡Procesamiento completado!')
-                
-            # Verificar si se usó fallback
-            if metadata.get('fallback_used', False):
-                st.warning("⚠️ Se utilizó procesamiento local (modelos no disponibles)")
-                st.info("💡 Para mejor calidad, configure HuggingFace API token en variables de entorno")
+                # Mostrar métricas de optimización
+                if result and metadata:
+                    processing_time = metadata.get('processing_time', 'N/A')
+                    device = metadata.get('device', 'unknown')
+                    
+                    st.success(f"✅ Procesamiento completado en {processing_time}")
+                    if 'api_processed' in metadata:
+                        st.info("🌐 Procesado vía API - Sin consumo de memoria local")
+                    elif device == 'cuda':
+                        st.info("🚀 Acelerado por GPU")
+                    else:
+                        st.info("💻 Procesado en CPU - Modo de bajo consumo")
             
             return result, metadata
-            
         except Exception as e:
             st.error(f"Error en el procesamiento: {str(e)}")
-            st.info("💡 Si el problema persiste, verifique la configuración de modelos y dependencias")
+            # Mostrar sugerencia de optimización
+            st.warning("💡 Tip: Si el error persiste, intenta reducir el tamaño de la imagen")
             return None, {}
     
     def analyze_image(self, image: Image.Image, analysis_type: str = "comparison_analysis") -> Dict[str, Any]:
@@ -328,8 +318,9 @@ class ImageEditingApp:
             steps = processing_info.get('steps', 'N/A')
             guidance_scale = processing_info.get('guidance_scale', 'N/A')
             
-            # Crear descripción específica basada en la técnica aplicada (sin Inpainting)
+            # Crear descripción específica basada en la técnica aplicada
             method_descriptions = {
+                "inpainting": "técnica de inpainting (eliminación y relleno inteligente de objetos)",
                 "outpainting": "técnica de outpainting (extensión de imagen más allá de sus bordes)",
                 "style_transfer": "técnica de transferencia de estilo artístico",
                 "object_removal": "técnica de eliminación específica de objetos",
@@ -420,21 +411,34 @@ class ImageEditingApp:
             
             st.markdown('<hr style="border-color: #7E57C2; margin: 2rem 0;">', unsafe_allow_html=True)
             
-            # Información de rendimiento
-            st.markdown('<h3 style="color: white;">⚡ Estado del Sistema</h3>', unsafe_allow_html=True)
+            # Información de rendimiento OPTIMIZADA para Streamlit
+            st.markdown('<h3 style="color: white;">⚡ Estado del Sistema Optimizado</h3>', unsafe_allow_html=True)
             
-            if hasattr(self.diffusion_processor, 'get_info'):
-                info = self.diffusion_processor.get_info()
-                device = info.get('device', 'unknown')
-                
-                if device == 'cuda':
-                    st.success("🚀 GPU disponible - Procesamiento acelerado")
-                else:
-                    st.warning("🖥️ CPU solamente - El procesamiento será más lento")
+            # Verificar modo de API
+            if hasattr(self, 'use_hf_api') and self.use_hf_api:
+                st.success("🚀 API de Hugging Face habilitada - Modelos ligeros")
+                st.info("⚡ Procesamiento vía cloud - Sin carga local")
+            else:
+                if hasattr(self.diffusion_processor, 'get_info'):
+                    info = self.diffusion_processor.get_info()
+                    device = info.get('device', 'unknown')
+                    
+                    if device == 'cuda':
+                        st.success("🚀 GPU disponible - Procesamiento acelerado")
+                    else:
+                        st.warning("🖥️ CPU solamente - Modo de bajo consumo activado")
                 
                 lazy_loading = info.get('lazy_loading_enabled', False)
                 if lazy_loading:
                     st.info("⚡ Carga lazy habilitada - Inicialización rápida")
+            
+            # Mostrar optimizaciones específicas para Streamlit
+            st.success("🎯 Modo optimizado para Streamlit habilitado")
+            st.info(f"📐 Resolución máxima: 256px (reducida para velocidad)")
+            st.info(f"⚙️ Parámetros optimizados: pasos reducidos")
+            
+            if 'optimization_enabled' in st.session_state:
+                st.success("✅ Optimizaciones Streamlit: ACTIVAS")
             
             st.markdown('<hr style="border-color: #7E57C2; margin: 2rem 0;">', unsafe_allow_html=True)
             
@@ -470,39 +474,43 @@ class ImageEditingApp:
             """
             <div style="text-align: center; color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 2rem;">
                 Plataforma avanzada que integra las últimas tecnologías de IA para ofrecer capacidades
-                de edición generativa: <span style="color: var(--purple); font-weight: 500;">Outpainting</span>,
-                <span style="color: var(--purple); font-weight: 500;">Style Transfer</span>
+                de edición generativa: <span style="color: var(--accent-purple); font-weight: 500;">Inpainting</span>,
+                <span style="color: var(--accent-purple); font-weight: 500;">Style Transfer</span>,
+                <span style="color: var(--accent-purple); font-weight: 500;">Object Removal</span>
                 y análisis inteligente con Gemini 2.0
             </div>
             """,
             unsafe_allow_html=True
         )
         
-        # Capacidades principales (sin Inpainting)
+        # Capacidades principales
         st.markdown(
             """
             <div style="text-align: center; margin-bottom: 2rem;">
-                <h3 style="color: var(--purple); margin-bottom: 1rem;">Capacidades principales:</h3>
+                <h3 style="color: var(--accent-purple); margin-bottom: 1rem;">Capacidades principales:</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; max-width: 800px; margin: 0 auto;">
-                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
-                        <div style="color: var(--purple); font-size: 1.5rem;">🔄</div>
+                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
+                        <div style="color: var(--accent-purple); font-size: 1.5rem;">🖼️</div>
+                        <strong>Inpainting:</strong> Eliminar y rellenar objetos de forma inteligente
+                    </div>
+                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
+                        <div style="color: var(--accent-purple); font-size: 1.5rem;">🔄</div>
                         <strong>Outpainting:</strong> Extender imágenes más allá de sus bordes
                     </div>
-                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
-                        <div style="color: var(--purple); font-size: 1.5rem;">🎭</div>
+                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
+                        <div style="color: var(--accent-purple); font-size: 1.5rem;">🎭</div>
                         <strong>Style Transfer:</strong> Transferir estilos artísticos
                     </div>
-                    
-                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
-                        <div style="color: var(--purple); font-size: 1.5rem;">🖼️</div>
+                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
+                        <div style="color: var(--accent-purple); font-size: 1.5rem;">🗑️</div>
+                        <strong>Object Removal:</strong> Eliminar objetos no deseados
+                    </div>
+                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
+                        <div style="color: var(--accent-purple); font-size: 1.5rem;">🖼️</div>
                         <strong>Background Replacement:</strong> Cambiar fondos manteniendo sujetos
                     </div>
-                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
-                        <div style="color: var(--purple); font-size: 1.5rem;">🧩</div>
-                        <strong>Composición Inteligente:</strong> Combinar elementos creativos
-                    </div>
-                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
-                        <div style="color: var(--purple); font-size: 1.5rem;">🧠</div>
+                    <div style="background: var(--card-bg); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border);">
+                        <div style="color: var(--accent-purple); font-size: 1.5rem;">🧠</div>
                         <strong>Análisis Inteligente:</strong> Análisis visual con Gemini 2.0
                     </div>
                 </div>
@@ -512,7 +520,7 @@ class ImageEditingApp:
         )
     
     def render_upload_section(self):
-        """Renderizar sección de carga de imagen con galería optimizada"""
+        """Renderizar sección de carga de imagen"""
         col1, col2 = st.columns([2, 1])
         
         with col1:
@@ -532,59 +540,34 @@ class ImageEditingApp:
                     st.session_state['uploaded_file'] = uploaded_file  # Guardar para obtener formato
                     st.success("✅ Imagen cargada exitosamente")
             
-            # Galería de ejemplos optimizada con mejor UX
+            # Galería de ejemplos debajo del uploader
             examples_dir = os.path.join('assets', 'ejemplos')
             if os.path.isdir(examples_dir):
-                st.markdown('<div style="margin-top:2rem"><h3 style="color: var(--purple);">🖼️ Ejemplos Rápidos</h3></div>', unsafe_allow_html=True)
-                st.markdown('<div style="margin-bottom: 1rem; color: var(--text-secondary);">Selecciona una imagen de ejemplo para comenzar</div>', unsafe_allow_html=True)
-                
+                st.markdown("<div style='margin-top:1rem'><strong>🖼️ Ejemplos rápidos:</strong></div>", unsafe_allow_html=True)
                 example_files = [f for f in os.listdir(examples_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
                 if example_files:
-                    # Calcular número de columnas óptimo
-                    num_examples = len(example_files)
-                    cols_per_row = min(3, num_examples)  # Máximo 3 columnas para mejor UX
-                    
-                    # Procesar ejemplos en filas
-                    for i in range(0, num_examples, cols_per_row):
-                        row_examples = example_files[i:i + cols_per_row]
-                        cols = st.columns(len(row_examples))
-                        
-                        for idx, fname in enumerate(row_examples):
-                            with cols[idx]:
-                                try:
-                                    img_path = os.path.join(examples_dir, fname)
-                                    img = Image.open(img_path)
-                                    
-                                    # Crear miniatura uniforme optimizada
-                                    thumb = img.copy()
-                                    thumb.thumbnail((150, 150), Image.Resampling.LANCZOS)
-                                    
-                                    # Crear canvas más pequeño para mejor visualización
-                                    canvas = Image.new('RGB', (150, 150), (240, 240, 240))
-                                    x_off = (150 - thumb.size[0]) // 2
-                                    y_off = (150 - thumb.size[1]) // 2
-                                    canvas.paste(thumb, (x_off, y_off))
-                                    
-                                    # CSS personalizado para cada ejemplo
-                                    example_id = f"example_{i+idx}"
-                                    
-                                    # Mostrar imagen con mejor presentación
-                                    st.markdown(f"""
-                                    <div class="example-container" onclick="document.getElementById('{example_id}').click()">
-                                        <img src="data:image/png;base64,{self._image_to_base64(canvas)}" 
-                                             class="example-image" width="150" height="150" style="display: block; margin: 0 auto;">
-                                        <div class="example-title">{fname.replace('.jpg', '').replace('.jpeg', '').replace('.png', '')}</div>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    
-                                    # Botón invisible para mantener funcionalidad
-                                    if st.button(f"Usar {fname}", key=example_id, help=f"Usar {fname} como imagen de ejemplo"):
-                                        st.session_state['original_image'] = img.convert('RGB')
-                                        st.session_state['uploaded_file'] = None
-                                        st.success(f"✅ Ejemplo '{fname}' seleccionado")
-                                        
-                                except Exception as e:
-                                    st.error(f"Error leyendo {fname}: {e}")
+                    # Limitar columnas a máximo 4 para buena visualización
+                    cols = st.columns(min(len(example_files), 4))
+                    for idx, fname in enumerate(example_files):
+                        col = cols[idx % len(cols)]
+                        with col:
+                            try:
+                                img_path = os.path.join(examples_dir, fname)
+                                img = Image.open(img_path)
+                                # Crear miniatura uniforme
+                                thumb = img.copy()
+                                thumb.thumbnail((160,160), Image.Resampling.LANCZOS)
+                                canvas = Image.new('RGB', (160,160), (255,255,255))
+                                x_off = (160 - thumb.size[0]) // 2
+                                y_off = (160 - thumb.size[1]) // 2
+                                canvas.paste(thumb, (x_off, y_off))
+                                st.image(canvas, caption=fname, width=160)
+                                if st.button(f"Usar {fname}", key=f"example_{idx}"):
+                                    st.session_state['original_image'] = img.convert('RGB')
+                                    st.session_state['uploaded_file'] = None
+                                    st.success(f"✅ Ejemplo '{fname}' seleccionado")
+                            except Exception as e:
+                                st.error(f"Error leyendo {fname}: {e}")
         
         with col2:
             st.markdown('<h3 class="section-header">📐 Información de la imagen</h3>', unsafe_allow_html=True)
@@ -606,20 +589,9 @@ class ImageEditingApp:
                     unsafe_allow_html=True
                 )
     
-    def _image_to_base64(self, image: Image.Image) -> str:
-        """Convertir imagen PIL a base64 para mostrar en HTML"""
-        import base64
-        from io import BytesIO
-        
-        buffer = BytesIO()
-        image.save(buffer, format='PNG')
-        img_str = base64.b64encode(buffer.getvalue()).decode()
-        return img_str
-    
     def render_processing_section(self):
-        """Renderizar sección de procesamiento optimizada"""
+        """Renderizar sección de procesamiento"""
         if 'original_image' not in st.session_state:
-            st.warning("⚠️ Primero sube una imagen para procesar")
             return
         
         st.markdown('<h3 class="section-header">🎯 Procesamiento</h3>', unsafe_allow_html=True)
@@ -627,111 +599,55 @@ class ImageEditingApp:
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            # Verificar estado del sistema
-            system_status = self._check_system_status()
-            
-            if not system_status['ready']:
-                st.error(f"❌ {system_status['message']}")
-                st.info("💡 Soluciones disponibles:")
-                for solution in system_status.get('solutions', []):
-                    st.write(f"• {solution}")
-                return
-            
-            # Mostrar estado del sistema
-            if system_status.get('warnings'):
-                for warning in system_status['warnings']:
-                    st.warning(f"⚠️ {warning}")
-            
-            # Selector de método (sin Inpainting) - usar las claves definidas en UIHelper
+            # Selector de método
             processing_method = st.selectbox(
                 "Selecciona el método de procesamiento",
-                list(self.ui_helper.processing_methods.keys()),
-                key="method_selector",
-                help="Elige la técnica de procesamiento que deseas aplicar"
+                [
+                    "Inpainting (Eliminar objetos)",
+                    "Outpainting (Extender imagen)", 
+                    "Style Transfer (Transferir estilo)",
+                    "Object Removal (Eliminar objeto específico)",
+                    "Background Replacement (Cambiar fondo)",
+                    "Composición Inteligente (Combinar elementos)"
+                ],
+                key="method_selector"
             )
             
             # Parámetros según el método
-            with st.expander("⚙️ Configuración avanzada", expanded=False):
-                params = self.ui_helper.get_processing_params(processing_method)
+            params = self.ui_helper.get_processing_params(processing_method)
             
-            # Botón de procesamiento con mejor feedback
-            if st.button("🚀 Procesar Imagen", key="process_button", type="primary", use_container_width=True):
-                # Obtener el método interno configurado en UIHelper
-                method_key = self.ui_helper.processing_methods[processing_method]['key']
+            # Botón de procesamiento
+            if st.button("🚀 Procesar Imagen", key="process_button", type="primary"):
+                # Mapear métodos
+                method_mapping = {
+                    "inpainting": "inpainting",
+                    "outpainting": "outpainting", 
+                    "style transfer": "style_transfer",
+                    "object removal": "object_removal",
+                    "background replacement": "background_replacement",
+                    "composición inteligente": "intelligent_composition"
+                }
                 
-                # Crear contenedor para resultados
-                result_container = st.container()
+                method_key = processing_method.split(' (')[0].lower()
+                if method_key in method_mapping:
+                    method_key = method_mapping[method_key]
+                else:
+                    method_key = method_key.replace(' ', '_')
                 
-                with result_container:
-                    result, metadata = self.process_image(st.session_state['original_image'], method_key, **params)
+                result, metadata = self.process_image(st.session_state['original_image'], method_key, **params)
+                
+                if result:
+                    st.session_state['processed_image'] = result
+                    st.session_state['processing_metadata'] = metadata
+                    st.success("✅ Imagen procesada exitosamente")
                     
-                    if result:
-                        st.session_state['processed_image'] = result
-                        st.session_state['processing_metadata'] = metadata
-                        
-                        # Mostrar métricas detalladas
-                        if 'processing_time' in metadata:
-                            st.success(f"✅ Imagen procesada exitosamente en {metadata['processing_time']}")
-                        
-                        if metadata.get('fallback_used', False):
-                            st.info("🔄 Procesamiento completado con fallback local")
-                        
-                        # Mostrar detalles técnicos
-                        with st.expander("📊 Detalles técnicos", expanded=False):
-                            col_a, col_b = st.columns(2)
-                            with col_a:
-                                st.metric("Tiempo", metadata.get('processing_time', 'N/A'))
-                                st.metric("Tamaño original", f"{metadata.get('original_size', 'N/A')}")
-                            with col_b:
-                                st.metric("Optimizado", metadata.get('optimized_size', 'N/A'))
-                                st.metric("Dispositivo", metadata.get('device', 'N/A'))
-                    else:
-                        st.error("❌ No se pudo procesar la imagen. Verifica los parámetros e intenta de nuevo.")
+                    # Mostrar métricas si están disponibles
+                    if 'processing_time' in metadata:
+                        st.info(f"⏱️ Tiempo de procesamiento: {metadata['processing_time']}")
                 
         with col2:
-            # Información de la imagen y previsualización
-            st.markdown("### 🖼️ Imagen Original")
-            st.image(st.session_state['original_image'], width=400)
-            
-            # Información adicional
-            if 'processed_image' in st.session_state:
-                st.markdown("### ✨ Imagen Procesada")
-                st.image(st.session_state['processed_image'], width=400)
-    
-    def _check_system_status(self) -> Dict[str, Any]:
-        """Verificar estado del sistema y mostrar advertencias apropiadas"""
-        status = {
-            'ready': True,
-            'message': '',
-            'warnings': [],
-            'solutions': []
-        }
-        
-        try:
-            # Verificar dispositivo
-            device = self.diffusion_processor.device
-            if device == 'cpu':
-                status['warnings'].append("Ejecutándose en CPU - el procesamiento será más lento")
-                status['solutions'].append("Para mejor rendimiento, instale CUDA/PyTorch con GPU")
-            
-            # Verificar si hay modelos cargados
-            loaded_models = len(self.diffusion_processor.pipes)
-            if loaded_models == 0:
-                status['warnings'].append("Modelos no pre-cargados - se usará procesamiento local")
-                status['solutions'].append("Para modelos completos, configure HUGGINGFACE_API_TOKEN")
-            
-            # Verificar API de Gemini
-            api_key = os.getenv('GOOGLE_API_KEY')
-            if not api_key:
-                status['warnings'].append("API key de Gemini no configurada - análisis limitado")
-                status['solutions'].append("Configure GOOGLE_API_KEY en archivo .env para análisis completo")
-                
-        except Exception as e:
-            status['ready'] = False
-            status['message'] = f"Error verificando sistema: {str(e)}"
-            status['solutions'].append("Verifique la instalación de dependencias")
-        
-        return status
+            # Imagen original (sin texto adicional)
+            st.image(st.session_state['original_image'], width=500)
     
     def render_comparison_section(self):
         """Renderizar sección de comparación con redimensionamiento automático"""
@@ -759,7 +675,7 @@ class ImageEditingApp:
                 st.image(processed_resized, width=400)
             else:
                 st.markdown(
-                    '<div style="background: var(--card-bg); border: 2px dashed var(--border); border-radius: 8px; padding: 2rem; text-align: center; color: var(--text-secondary);">Procesa una imagen para ver la comparación</div>',
+                    '<div style="background: var(--card-bg); border: 2px dashed var(--card-border); border-radius: 8px; padding: 2rem; text-align: center; color: var(--text-secondary);">Procesa una imagen para ver la comparación</div>',
                     unsafe_allow_html=True
                 )
     
@@ -791,8 +707,9 @@ class ImageEditingApp:
                         processing_info = st.session_state.get('processing_metadata', {})
                         method = processing_info.get('method', 'Desconocida')
                         
-                        # Prompt detallado basado en el método aplicado (sin Inpainting)
+                        # Prompt detallado basado en el método aplicado
                         method_descriptions = {
+                            "inpainting": "eliminación y relleno inteligente de objetos",
                             "outpainting": "extensión de imagen más allá de sus bordes",
                             "style_transfer": "transferencia de estilo artístico",
                             "object_removal": "eliminación específica de objetos",
@@ -891,11 +808,10 @@ class ImageEditingApp:
         # Footer
         st.markdown(
             """
-            <div style="text-align: center; margin-top: 3rem; padding: 2rem; border-top: 1px solid var(--border);">
+            <div style="text-align: center; margin-top: 3rem; padding: 2rem; border-top: 1px solid var(--card-border);">
                 <div style="color: var(--text-secondary);">
                     💻 Procesamiento Digital de Imágenes - IFTS24<br>
-                    ⚡ Alfredo Poblete - 2025<br>
-                    <span style="color: var(--purple);">🚀 Versión Optimizada - Sin Inpainting</span>
+                    ⚡ Alfredo Poblete - 2025
                 </div>
             </div>
             """,

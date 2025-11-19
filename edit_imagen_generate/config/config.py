@@ -13,42 +13,57 @@ class Config:
     VERSION = "1.0.0"
     DESCRIPTION = "Aplicación avanzada que integra modelos de difusión y análisis inteligente"
     
-    # Configuración simplificada y consolidada
+    # Configuración OPTIMIZADA para Streamlit - Modelos más ligeros
     MODEL_CONFIG = {
+        'inpainting': {
+            'model_name': 'runwayml/stable-diffusion-inpainting',
+            'default_steps': 20,  # Reducido para velocidad
+            'default_guidance': 6.5,  # Reducido para velocidad
+            'api_model': 'diffusers/stable-diffusion-inpainting-0.1'
+        },
         'img2img': {
             'model_name': 'runwayml/stable-diffusion-v1-5',
-            'default_steps': 20,
-            'default_guidance': 6.5
+            'default_steps': 15,  # Muy reducido para velocidad
+            'default_guidance': 6.0,  # Reducido para velocidad
+            'api_model': 'runwayml/stable-diffusion-v1-5'
         },
-        'upscale': {
-            'model_name': 'stabilityai/stable-diffusion-x4-upscaler',
-            'default_steps': 25,
-            'default_guidance': 7.0
+        'style_transfer': {
+            'model_name': 'prompthero/openjourney',
+            'default_steps': 12,  # Muy reducido para velocidad
+            'default_guidance': 5.5,  # Reducido para velocidad
+            'api_model': 'prompthero/openjourney'
         }
     }
     
     IMAGE_CONFIG = {
-        'max_size': 512, 'min_size': 64,
+        'max_size': 256, 'min_size': 64,  # Más agresivo para Streamlit
         'allowed_formats': ['JPEG', 'JPG', 'PNG'],
-        'quality': 95
+        'quality': 90,  # Ligeramente reducido para velocidad
+        'streamlit_max_size': 256  # Límite específico para Streamlit
     }
     
     ANALYSIS_CONFIG = {
-        'model': 'gemini-2.0-flash', 'max_tokens': 2048,
-        'temperature': 0.5, 'topK': 32, 'topP': 1
+        'model': 'gemini-2.0-flash', 'max_tokens': 1024,  # Reducido para velocidad
+        'temperature': 0.3, 'topK': 20, 'topP': 0.8,  # Más conservador para velocidad
+        'timeout': 30  # Timeout más corto para Streamlit
     }
     
     UI_CONFIG = {
         'page_title': 'Edición Generativa de Imágenes',
         'page_icon': '🎨', 'layout': 'wide',
-        'initial_sidebar_state': 'expanded'
+        'initial_sidebar_state': 'expanded',
+        'show_optimization_options': True,
+        'show_model_status': True,
+        'enable_performance_mode': True
     }
     
     PERFORMANCE_CONFIG = {
         'batch_size': 1, 'num_workers': 0, 'use_amp': True,
         'torch_dtype': 'float16' if os.getenv('CUDA_VISIBLE_DEVICES') else 'float32',
         'enable_cudnn_benchmark': True, 'allow_tf32': True,
-        'max_memory_mb': 8000, 'low_memory_mode': True
+        'max_memory_mb': 6000, 'low_memory_mode': True,  # Más conservador para Streamlit
+        'aggressive_optimization': True,
+        'enable_lazy_loading': True
     }
     
     FILE_CONFIG = {
