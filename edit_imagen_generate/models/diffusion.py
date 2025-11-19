@@ -13,6 +13,15 @@ from PIL import Image
 from typing import Optional, Tuple, Dict, Any
 import io
 import warnings
+import traceback
+
+# Importar streamlit para logs visibles
+try:
+    import streamlit as st
+    STREAMLIT_AVAILABLE = True
+except ImportError:
+    STREAMLIT_AVAILABLE = False
+
 warnings.filterwarnings("ignore")
 
 class DiffusionProcessor:
@@ -57,7 +66,20 @@ class DiffusionProcessor:
         model_name = self.models.get(model_key, self.models['img2img'])
         return f"{self.base_url}/{model_name}"
     
-    def _parse_hf_response_to_image(self, response: requests.Response) -> Optional[Image.Image]:
+    def _log(self, message: str, level: str = "info"):
+        """Log message to console and Streamlit if available"""
+        print(message)
+        if STREAMLIT_AVAILABLE:
+            if level == "error":
+                st.error(message)
+            elif level == "warning":
+                st.warning(message)
+            elif level == "success":
+                st.success(message)
+            else:
+                st.write(message)
+    
+    def _parse_hf_response_to_image(self, response: requests.Response) -> Tuple[Optional[Image.Image], Optional[str]]:
         """Parsear respuesta de HuggingFace a imagen PIL
         
         Maneja 3 formatos posibles:
