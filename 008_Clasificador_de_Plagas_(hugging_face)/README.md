@@ -154,3 +154,5 @@ Este proyecto tiene aplicaciones directas en la agricultura de precisión :
 * Diagnóstico Temprano para Agricultores: Permite identificar problemas (plagas o enfermedades) de manera inmediata en el campo con una simple foto, reduciendo la necesidad de análisis de laboratorio.
 * Monitoreo Automatizado de Cultivos: Integración en sistemas de drones o cámaras estáticas para escanear grandes áreas y alertar sobre brotes de enfermedades.
 * Herramienta Educativa: Puede servir como plataforma interactiva para estudiantes o nuevos técnicos agrícolas en el reconocimiento de patologías de plantas.
+
+Proyecto desplegado en HuggingFace: https://huggingface.co/spaces/AlfredoPoblete/Clasificador_de_Plagas_en_Cultivos_Agricolas
