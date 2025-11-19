@@ -171,55 +171,120 @@ class DiffusionProcessor:
         return self.pipes[model_key]
     
     def _create_demo_pipeline(self, model_key: str):
-        """Crear pipeline demo usando transformaciones locales"""
+        """Crear pipeline con efectos ULTRA DRAMÁTICOS e imposibles de no notar"""
         class DemoPipeline:
             def __init__(self, device, pipeline_type):
                 self.device = device
                 self.pipeline_type = pipeline_type
                 
             def __call__(self, **kwargs):
-                """Ejecutar transformación demo basada en el tipo de pipeline"""
-                from PIL import Image, ImageEnhance, ImageFilter
+                """Ejecutar transformación ULTRA VISIBLE"""
+                from PIL import Image, ImageDraw, ImageFilter
                 import numpy as np
                 
                 image = kwargs.get('image')
                 if image is None:
                     return type('Result', (), {
-                        'images': [Image.new('RGB', (512, 512), color=(100, 150, 200))]
+                        'images': [Image.new('RGB', (512, 512), color=(255, 0, 0))]
                     })()
                 
                 result_image = image.copy()
+                width, height = result_image.size
                 
-                # Aplicar transformaciones según el tipo de pipeline
+                # APLICAR TRANSFORMACIONES ULTRA VISIBLES según el método
                 if self.pipeline_type == 'inpainting':
-                    # Simular inpainting con desenfoque de bordes
-                    mask = kwargs.get('mask_image')
-                    if mask:
-                        # Aplicar blur solo en áreas de la máscara
-                        result_image = result_image.filter(ImageFilter.GaussianBlur(radius=2))
+                    # INPAINTING: Rectángulo amarillo gigante
+                    draw = ImageDraw.Draw(result_image)
+                    draw.rectangle([width//4, height//4, 3*width//4, 3*height//4],
+                                 fill=(255, 255, 0), outline=(0, 0, 0), width=8)
+                    print("✅ INPAINTING: Área amarilla agregada")
                 
-                elif self.pipeline_type == 'img2img':
-                    # Simular transferencia de estilo con efectos
-                    strength = kwargs.get('strength', 0.5)
-                    # Aplicar saturación y contraste
-                    enhancer = ImageEnhance.Color(result_image)
-                    result_image = enhancer.enhance(1 + strength * 0.3)
-                    
-                    enhancer = ImageEnhance.Contrast(result_image)
-                    result_image = enhancer.enhance(1 + strength * 0.2)
+                elif self.pipeline_type == 'outpainting':
+                    # OUTPAINTING: Imagen en canvas morado más grande
+                    new_size = (int(width * 2), int(height * 2))
+                    result_image = Image.new('RGB', new_size, (128, 0, 128))  # Morado
+                    x_offset = (new_size[0] - width) // 2
+                    y_offset = (new_size[1] - height) // 2
+                    result_image.paste(image, (x_offset, y_offset))
+                    # Borde blanco grueso
+                    draw = ImageDraw.Draw(result_image)
+                    draw.rectangle([0, 0, new_size[0]-1, new_size[1]-1],
+                                 outline=(255, 255, 255), width=15)
+                    print("✅ OUTPAINTING: Imagen en canvas morado")
+                
+                elif self.pipeline_type == 'img2img' or self.pipeline_type == 'style_transfer':
+                    # STYLE TRANSFER: Filtro rojo EXTREMO
+                    img_array = np.array(result_image)
+                    # Multiplicar todos los valores por 0.3 para oscurecer y añadir rojo
+                    red_tint = img_array * np.array([2.0, 0.3, 0.3])
+                    red_tint = np.clip(red_tint, 0, 255).astype(np.uint8)
+                    result_image = Image.fromarray(red_tint)
+                    print("✅ STYLE TRANSFER: Filtro rojo aplicado")
+                
+                elif self.pipeline_type == 'object_removal':
+                    # OBJECT REMOVAL: Agujero verde grande
+                    draw = ImageDraw.Draw(result_image)
+                    hole_size = min(width, height) // 2
+                    x = (width - hole_size) // 2
+                    y = (height - hole_size) // 2
+                    draw.ellipse([x, y, x + hole_size, y + hole_size],
+                               fill=(0, 255, 0), outline=(0, 128, 0), width=6)
+                    print("✅ OBJECT REMOVAL: Agujero verde creado")
+                
+                elif self.pipeline_type == 'background_replacement':
+                    # BACKGROUND REPLACEMENT: Borde azul grueso
+                    draw = ImageDraw.Draw(result_image)
+                    draw.rectangle([0, 0, width-1, height-1],
+                                 outline=(0, 0, 255), width=20)
+                    # Rellenar esquinas con azul
+                    draw.rectangle([0, 0, width//3, height//3], fill=(0, 150, 255))
+                    draw.rectangle([2*width//3, 0, width, height//3], fill=(0, 150, 255))
+                    draw.rectangle([0, 2*height//3, width//3, height], fill=(0, 150, 255))
+                    draw.rectangle([2*width//3, 2*height//3, width, height], fill=(0, 150, 255))
+                    print("✅ BACKGROUND REPLACEMENT: Bordes azules agregados")
+                
+                elif self.pipeline_type == 'intelligent_composition':
+                    # INTELLIGENT COMPOSITION: Múltiples elementos coloridos
+                    draw = ImageDraw.Draw(result_image)
+                    # Círculos de colores en esquinas
+                    colors = [(255, 0, 255), (0, 255, 255), (255, 255, 0), (255, 0, 0)]
+                    positions = [(width//8, height//8), (7*width//8, height//8),
+                               (width//8, 7*height//8), (7*width//8, 7*height//8)]
+                    for color, (x, y) in zip(colors, positions):
+                        draw.ellipse([x-30, y-30, x+30, y+30], fill=color, outline=(0, 0, 0), width=3)
+                    print("✅ INTELLIGENT COMPOSITION: Elementos coloridos agregados")
                 
                 elif self.pipeline_type == 'upscale':
-                    # Simular upscale con ligero sharpen
-                    result_image = result_image.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=3))
+                    # UPSCALE: Aumentar tamaño significativamente
+                    new_width = int(width * 2.5)
+                    new_height = int(height * 2.5)
+                    result_image = result_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    # Borde verde súper grueso
+                    draw = ImageDraw.Draw(result_image)
+                    draw.rectangle([0, 0, new_width-1, new_height-1],
+                                 outline=(0, 255, 0), width=25)
+                    print("✅ UPSCALE: Imagen 2.5x más grande con borde verde")
+                
+                else:
+                    # DEFAULT: Rectángulo naranja
+                    draw = ImageDraw.Draw(result_image)
+                    draw.rectangle([width//3, height//3, 2*width//3, 2*height//3],
+                                 fill=(255, 165, 0), outline=(0, 0, 0), width=5)
+                    print("✅ DEFAULT: Rectángulo naranja")
                 
                 return type('Result', (), {
                     'images': [result_image]
                 })()
         
-        # Mapear tipos de pipeline
+        # Mapear pipeline types
         pipeline_mapping = {
             'inpainting': 'inpainting',
+            'outpainting': 'outpainting',
             'img2img': 'img2img',
+            'style_transfer': 'style_transfer',
+            'object_removal': 'object_removal',
+            'background_replacement': 'background_replacement',
+            'intelligent_composition': 'intelligent_composition',
             'upscale': 'upscale'
         }
         
@@ -548,29 +613,38 @@ class DiffusionProcessor:
             raise Exception(f"Error en intelligent composition: {str(e)}")
     
     def process(self, image: Image.Image, method: str, **kwargs) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
-        """Método principal de procesamiento con optimizaciones"""
+        """Método principal de procesamiento con logging ULTRA DETALLADO"""
         try:
             start_time = time.time()
+            
+            # Logging inicial ULTRA DETALLADO
+            print(f"🚀 INICIANDO PROCESAMIENTO")
+            print(f"📊 Método: {method}")
+            print(f"🖼️ Tamaño imagen entrada: {image.size}")
+            print(f"⚙️ Parámetros: {kwargs}")
             
             # Optimización: Redimensionar imagen para mejorar velocidad
             original_size = image.size
             image = self._optimize_image_size(image)
             optimized_size = image.size
             
-            print(f"Iniciando procesamiento con metodo: {method}")
-            print(f"Tamano original: {original_size}, Optimizado: {optimized_size}")
+            print(f"📏 Tamaño optimizado: {optimized_size}")
             
             # Remover parámetros que no son argumentos del método específico
             filtered_kwargs = {k: v for k, v in kwargs.items()
                              if k not in ['prompt', 'style_prompt', 'context_prompt', 'background_prompt', 'elements_prompt']}
             
+            print(f"🔧 Parámetros filtrados: {filtered_kwargs}")
+            
             # Procesar según método (cada uno usa carga lazy de modelos)
             if method == "inpainting":
+                print("🎯 EJECUTANDO INPAINTING")
                 mask = self._create_optimized_mask(image, kwargs, "inpainting")
                 prompt = kwargs.get('prompt', 'natural background')
                 result, metadata = self.inpainting(image, mask, prompt, **filtered_kwargs)
                 
             elif method == "outpainting":
+                print("🎯 EJECUTANDO OUTPAINTING")
                 extension_factor = kwargs.get('extension_factor', 1.5)
                 prompt = kwargs.get('prompt', 'extended natural landscape seamlessly')
                 # Filtrar extension_factor para evitar conflicto
@@ -579,10 +653,12 @@ class DiffusionProcessor:
                 result, metadata = self.outpainting(image, extension_factor, prompt, **filtered_outpaint_kwargs)
                 
             elif method == "style_transfer":
+                print("🎯 EJECUTANDO STYLE TRANSFER")
                 style_prompt = kwargs.get('style_prompt', 'artistic style painting')
                 result, metadata = self.style_transfer(image, style_prompt, **filtered_kwargs)
                 
             elif method == "object_removal":
+                print("🎯 EJECUTANDO OBJECT REMOVAL")
                 # Detección inteligente del objeto
                 object_description = kwargs.get('object_description', 'unwanted object')
                 context_prompt = kwargs.get('context_prompt', 'natural seamless background')
@@ -590,16 +666,24 @@ class DiffusionProcessor:
                 result, metadata = self.object_removal(image, mask, context_prompt, **filtered_kwargs)
                 
             elif method == "background_replacement":
+                print("🎯 EJECUTANDO BACKGROUND REPLACEMENT")
                 mask = self._create_optimized_mask(image, kwargs, "background_replacement")
                 background_prompt = kwargs.get('background_prompt', 'beautiful background')
                 result, metadata = self.background_replacement(image, mask, background_prompt, **filtered_kwargs)
                 
             elif method == "intelligent_composition":
+                print("🎯 EJECUTANDO INTELLIGENT COMPOSITION")
                 elements_prompt = kwargs.get('elements_prompt', 'harmonious composition')
                 result, metadata = self.intelligent_composition(image, elements_prompt, **filtered_kwargs)
                 
             else:
+                print(f"❌ MÉTODO NO SOPORTADO: {method}")
                 raise ValueError(f"Metodo no soportado: {method}")
+            
+            # Verificación ULTRA DETALLADA del resultado
+            print(f"✅ PROCESAMIENTO COMPLETADO")
+            print(f"📏 Tamaño resultado: {result.size if result else 'None'}")
+            print(f"🔍 Tipo resultado: {type(result)}")
             
             # Añadir métricas de optimización
             end_time = time.time()
@@ -610,15 +694,21 @@ class DiffusionProcessor:
                 'original_size': original_size,
                 'optimized_size': optimized_size,
                 'memory_optimized': original_size != optimized_size,
-                'lazy_loading': True
+                'lazy_loading': True,
+                'demo_mode': self.demo_mode,
+                'method_executed': method
             })
             
-            print(f"Procesamiento completado en {processing_time:.2f}s")
+            print(f"⏱️ Procesamiento completado en {processing_time:.2f}s")
+            print(f"📊 Metadata: {metadata}")
+            
             return result, metadata
                 
         except Exception as e:
-            print(f"Error procesando imagen: {str(e)}")
-            return None, {"error": str(e)}
+            print(f"❌ ERROR procesando imagen: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None, {"error": str(e), "method": method}
     
     def _create_optimized_mask(self, image: Image.Image, kwargs: Dict, method_type: str) -> Image.Image:
         """Crear máscara optimizada según el tamaño de la imagen actual"""
