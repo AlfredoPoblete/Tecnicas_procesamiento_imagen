@@ -1,15 +1,3 @@
----
-title: Clasificador De Plagas En Cultivos Agricolas
-emoji: 🌍
-colorFrom: blue
-colorTo: green
-sdk: gradio
-sdk_version: 5.49.1
-app_file: app.py
-pinned: false
-license: mit
-short_description: Detección y clasificación de plagas o enfermedades en hojas
----
 
 # Proyecto desarrollado para la materia Procesamiento Digital de Imágenes y Visión por Computadora.
 
