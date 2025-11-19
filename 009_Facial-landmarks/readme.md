@@ -16,6 +16,8 @@ Aplicación web para detectar 478 puntos clave en rostros humanos usando MediaPi
 - **Streamlit**: Framework web
 - **Python 3.11+**
 
+App Desplegada en HuggingFace: https://huggingface.co/spaces/AlfredoPoblete/Landmark_Facial
+
 ## Instalación Local
 
 ```bash
@@ -34,3 +36,4 @@ pip install -r requirements.txt
 # Ejecutar aplicación
 
 streamlit run app.py
+
