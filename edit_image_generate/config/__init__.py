@@ -1,3 +1,0 @@
-"""
-Configuración del proyecto
-"""
