@@ -1,8 +1,9 @@
 """
-Aplicación de Edición Generativa de Imágenes - Versión Final Simplificada
+Aplicación de Edición Generativa de Imágenes - VERSIÓN CON CARGA LAZY CORREGIDA
 Tema oscuro con interfaz optimizada, carga lazy de modelos y API Key desde .env
 
 Procesamiento Digital de Imágenes - IFTS24
+Solución al problema "connection reset by peer" mediante carga lazy de modelos
 """
 
 import streamlit as st
@@ -181,22 +182,23 @@ def configure_page():
     load_css()
 
 class ImageEditingApp:
-    """Aplicación principal para edición generativa de imágenes - Versión OPTIMIZADA para Streamlit"""
+    """Aplicación principal para edición generativa de imágenes - VERSIÓN CON CARGA LAZY CORREGIDA"""
     
     def __init__(self):
-        # Configuración de optimizaciones
+        # Configuración de optimizaciones - Solo configuraciones ligeras
         self.streamlit_mode = os.getenv('STREAMLIT_APP', 'false').lower() == 'true'
-        self.use_hf_api = os.getenv('USE_HF_API', 'false').lower() == 'true'
+        self.use_hf_api = os.getenv('USE_HF_API', '').lower() in ['true', '1', 'yes', 'on']
         
-        # Inicializar con indicador de carga
-        with st.spinner("🚀 Inicializando optimizaciones para Streamlit..."):
-            # Usar el modelo optimizado
-            self.diffusion_processor = DiffusionProcessor()
-            self.analyzer = GeminiAnalyzer()
-            self.image_processor = ImageProcessor()
-            self.ui_helper = UIHelper()
+        # Inicialización lazy - NO cargar modelos inmediatamente
+        self.diffusion_processor = None  # Carga lazy
+        self.analyzer = None  # Carga lazy
+        self.image_processor = None  # Carga lazy
+        self.ui_helper = None  # Carga lazy
         
-        # Configurar variables de estado
+        # Marcar procesadores como no cargados
+        self._processors_loaded = False
+        
+        # Configurar variables de estado ligeras
         if 'analysis_results' not in st.session_state:
             st.session_state['analysis_results'] = {}
         
@@ -204,6 +206,31 @@ class ImageEditingApp:
         st.session_state['optimization_enabled'] = True
         st.session_state['lightweight_mode'] = True
         st.session_state['api_mode'] = self.use_hf_api
+        
+        print("🎯 ImageEditingApp inicializado con carga lazy")
+    
+    def _ensure_diffusion_processor(self):
+        """Asegurar que el DiffusionProcessor esté cargado - CORRECCIÓN CRÍTICA"""
+        if self.diffusion_processor is None:
+            print("📦 Cargando DiffusionProcessor bajo demanda...")
+            with st.spinner("🚀 Cargando modelo de difusión..."):
+                self.diffusion_processor = DiffusionProcessor()
+            print("✅ DiffusionProcessor cargado exitosamente")
+    
+    def _ensure_analyzer(self):
+        """Asegurar que el GeminiAnalyzer esté cargado"""
+        if self.analyzer is None:
+            print("🧠 Cargando GeminiAnalyzer bajo demanda...")
+            with st.spinner("🧠 Cargando analizador..."):
+                self.analyzer = GeminiAnalyzer()
+            print("✅ GeminiAnalyzer cargado exitosamente")
+    
+    def _ensure_ui_helper(self):
+        """Asegurar que el UIHelper esté cargado"""
+        if self.ui_helper is None:
+            print("🎨 Cargando UIHelper bajo demanda...")
+            self.ui_helper = UIHelper()
+            print("✅ UIHelper cargado exitosamente")
     
     def resize_images_to_same_size(self, img1: Image.Image, img2: Image.Image, target_width: int = 400) -> Tuple[Image.Image, Image.Image]:
         """Redimensionar dos imágenes para que tengan exactamente el mismo tamaño manteniendo proporciones"""
@@ -249,7 +276,7 @@ class ImageEditingApp:
             return None
     
     def process_image(self, image: Image.Image, method: str, **kwargs) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
-        """Procesar imagen usando modelos de difusión optimizados para Streamlit"""
+        """Procesar imagen usando modelos de difusión optimizados para Streamlit - CON CARGA LAZY"""
         try:
             # Mostrar progreso específico para cada método
             method_descriptions = {
@@ -262,6 +289,9 @@ class ImageEditingApp:
             }
             
             description = method_descriptions.get(method, f'🚀 Procesando imagen con {method}...')
+            
+            # CARGA LAZY CRÍTICA: Asegurar que el DiffusionProcessor esté cargado
+            self._ensure_diffusion_processor()
             
             # Spinner con mensaje específico
             with st.spinner(description):
@@ -301,13 +331,16 @@ class ImageEditingApp:
             return None, {}
     
     def analyze_image(self, image: Image.Image, analysis_type: str = "comparison_analysis") -> Dict[str, Any]:
-        """Analizar imagen usando Gemini 2.0 con análisis comparativo entre original y procesada"""
+        """Analizar imagen usando Gemini 2.0 con análisis comparativo - CON CARGA LAZY"""
         try:
             # Verificar si hay API key configurada
             api_key = os.getenv('GOOGLE_API_KEY')
             if not api_key:
                 st.error("❌ No se encontró API key de Gemini configurada")
                 return {"error": "API key no configurada"}
+            
+            # CARGA LAZY: Asegurar que el analyzer esté cargado
+            self._ensure_analyzer()
             
             # Obtener imagen original si existe
             original_image = st.session_state.get('original_image')
@@ -419,7 +452,8 @@ class ImageEditingApp:
                 st.success("🚀 API de Hugging Face habilitada - Modelos ligeros")
                 st.info("⚡ Procesamiento vía cloud - Sin carga local")
             else:
-                if hasattr(self.diffusion_processor, 'get_info'):
+                # CARGA LAZY: Solo obtener info si el procesador está cargado
+                if self.diffusion_processor is not None:
                     info = self.diffusion_processor.get_info()
                     device = info.get('device', 'unknown')
                     
@@ -427,10 +461,12 @@ class ImageEditingApp:
                         st.success("🚀 GPU disponible - Procesamiento acelerado")
                     else:
                         st.warning("🖥️ CPU solamente - Modo de bajo consumo activado")
-                
-                lazy_loading = info.get('lazy_loading_enabled', False)
-                if lazy_loading:
-                    st.info("⚡ Carga lazy habilitada - Inicialización rápida")
+                    
+                    lazy_loading = info.get('lazy_loading_enabled', False)
+                    if lazy_loading:
+                        st.info("⚡ Carga lazy habilitada - Inicialización rápida")
+                else:
+                    st.info("💻 Modelos locales - Se cargarán bajo demanda")
             
             # Mostrar optimizaciones específicas para Streamlit
             st.success("🎯 Modo optimizado para Streamlit habilitado")
@@ -590,7 +626,7 @@ class ImageEditingApp:
                 )
     
     def render_processing_section(self):
-        """Renderizar sección de procesamiento"""
+        """Renderizar sección de procesamiento - CON CARGA LAZY"""
         if 'original_image' not in st.session_state:
             return
         
@@ -612,6 +648,9 @@ class ImageEditingApp:
                 ],
                 key="method_selector"
             )
+            
+            # CARGA LAZY: Asegurar que el UIHelper esté cargado antes de usarlo
+            self._ensure_ui_helper()
             
             # Parámetros según el método
             params = self.ui_helper.get_processing_params(processing_method)
@@ -680,7 +719,7 @@ class ImageEditingApp:
                 )
     
     def render_analysis_section(self):
-        """Renderizar sección de análisis simplificada con Gemini 2.0"""
+        """Renderizar sección de análisis simplificada con Gemini 2.0 - CON CARGA LAZY"""
         if 'processed_image' not in st.session_state:
             return
         
@@ -702,6 +741,9 @@ class ImageEditingApp:
                         if not original or not processed:
                             st.error("❌ No hay imágenes disponibles para analizar")
                             return
+
+                        # CARGA LAZY: Asegurar que el analyzer esté cargado
+                        self._ensure_analyzer()
 
                         # Información del procesamiento aplicado
                         processing_info = st.session_state.get('processing_metadata', {})
@@ -811,7 +853,8 @@ class ImageEditingApp:
             <div style="text-align: center; margin-top: 3rem; padding: 2rem; border-top: 1px solid var(--card-border);">
                 <div style="color: var(--text-secondary);">
                     💻 Procesamiento Digital de Imágenes - IFTS24<br>
-                    ⚡ Alfredo Poblete - 2025
+                    ⚡ Alfredo Poblete - 2025<br>
+                    🚀 Versión con Carga Lazy Corregida - Sin "Connection Reset"
                 </div>
             </div>
             """,
