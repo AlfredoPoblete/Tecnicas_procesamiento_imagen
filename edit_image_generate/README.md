@@ -16,10 +16,9 @@ Una aplicación avanzada que integra modelos de difusión de última generación
 ## 🚀 Características Principales
 
 ### 🖼️ Edición Generativa de Imágenes
-- **Inpainting**: Eliminar objetos no deseados con relleno inteligente
 - **Outpainting**: Extender imágenes más allá de sus bordes
 - **Style Transfer**: Transferir estilos artísticos manteniendo contenido
-- **Object Removal**: Eliminación precisa de objetos específicos
+- **Object Removal**: Eliminación precisa de objetos específicos (reemplazo inteligente)
 - **Background Replacement**: Cambiar fondos preservando sujetos principales
 - **Composición Inteligente**: Combinar elementos de múltiples imágenes
 
@@ -34,7 +33,7 @@ Una aplicación avanzada que integra modelos de difusión de última generación
 - Generación rápida de escenarios y texturas
 - Outpainting para mundos expandidos
 - Style transfer para consistencia gráfica
-- Inpainting para limpieza de assets
+- Object Removal para limpieza de assets
 
 ## 🏗️ Arquitectura del Proyecto
 
@@ -135,13 +134,16 @@ La aplicación sigue el diseño especificado:
 
 ### Métodos de Procesamiento
 
-#### 🖼️ Inpainting
+#### 🗑️ Object Removal (Inpainting deshabilitado)
+La funcionalidad de inpainting ha sido deshabilitada en esta versión para evitar la descarga de pesos y la ejecución de modelos locales en entornos con recursos limitados (por ejemplo, Streamlit Cloud). En su lugar, se recomienda usar **Object Removal** con máscara o la detección inteligente integrada.
+
+Ejemplo de uso — `object_removal` (prompt de contexto):
 ```python
-# Eliminar objetos no deseados
+# Eliminar objeto específico y rellenar con fondo natural
 params = {
-    'prompt': 'natural background texture',
-    'num_inference_steps': 30,
-    'guidance_scale': 7.5
+    'context_prompt': 'natural background texture, photorealistic',
+    'num_inference_steps': 45,
+    'guidance_scale': 9.0
 }
 ```
 
@@ -168,9 +170,10 @@ params = {
 ## 🔧 APIs y Modelos Utilizados
 
 ### Modelos de Difusión
-- **Stable Diffusion Inpainting**: `runwayml/stable-diffusion-inpainting`
 - **Stable Diffusion v1.5**: `runwayml/stable-diffusion-v1-5` 
 - **Stable Diffusion Upscaler**: `stabilityai/stable-diffusion-x4-upscaler`
+
+Nota: El modelo `runwayml/stable-diffusion-inpainting` aparece en la documentación histórica del proyecto, pero la funcionalidad de inpainting fue deshabilitada para evitar descargas locales en entornos con recursos limitados. Las operaciones de eliminación de objetos y reemplazo de fondo se realizan mediante la Inference API de Hugging Face usando flujos `img2img` seguros.
 
 ### Análisis Visual
 - **Gemini 2.0 Flash**: Análisis multimodal avanzado
@@ -189,7 +192,7 @@ params = {
 ```markdown
 1. **Expansión de Conceptos**: Usar outpainting para crear worlds más grandes
 2. **Unificación de Estilo**: Style transfer para portfolios consistentes  
-3. **Limpieza Rápida**: Inpainting para refinar bocetos
+3. **Limpieza Rápida**: Object Removal para refinar bocetos y assets
 ```
 
 ### Para Desarrolladores de Juegos
