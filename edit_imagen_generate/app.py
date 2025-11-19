@@ -181,33 +181,18 @@ def configure_page():
     load_css()
 
 class ImageEditingApp:
-    """Aplicación principal para edición generativa de imágenes - CARGA LAZY REAL"""
+    """Aplicación principal para edición generativa de imágenes - Versión Final Simplificada"""
     
     def __init__(self):
-        # DiffusionProcessor se inicializa lazy - no en el constructor
-        self._diffusion_processor = None
-        
-        # Otros componentes que sí se pueden inicializar inmediatamente
-        try:
-            self.analyzer = GeminiAnalyzer()
-        except Exception as e:
-            print(f"Error inicializando analyzer: {e}")
-            self.analyzer = None
-            
+        # Usar el modelo optimizado
+        self.diffusion_processor = DiffusionProcessor()
+        self.analyzer = GeminiAnalyzer()
         self.image_processor = ImageProcessor()
         self.ui_helper = UIHelper()
         
         # Configurar variables de estado
         if 'analysis_results' not in st.session_state:
             st.session_state['analysis_results'] = {}
-    
-    @property
-    def diffusion_processor(self):
-        """Property lazy para DiffusionProcessor"""
-        if self._diffusion_processor is None:
-            print("Inicializando DiffusionProcessor (lazy)...")
-            self._diffusion_processor = DiffusionProcessor()
-        return self._diffusion_processor
     
     def resize_images_to_same_size(self, img1: Image.Image, img2: Image.Image, target_width: int = 400) -> Tuple[Image.Image, Image.Image]:
         """Redimensionar dos imágenes para que tengan exactamente el mismo tamaño manteniendo proporciones"""
@@ -380,35 +365,18 @@ class ImageEditingApp:
             # Información de rendimiento
             st.markdown('<h3 style="color: white;">⚡ Estado del Sistema</h3>', unsafe_allow_html=True)
             
-            # Verificar estado del sistema sin activar carga lazy prematura
-            try:
-                if hasattr(self.diffusion_processor, 'get_info'):
-                    # Solo obtener info si ya está inicializado
-                    dp = self._diffusion_processor
-                    if dp is not None and dp.initialized:
-                        info = dp.get_info()
-                        device = info.get('device', 'unknown')
-                        
-                        if device == 'cuda':
-                            st.success("🚀 GPU disponible - Procesamiento acelerado")
-                        else:
-                            st.warning("🖥️ CPU solamente - El procesamiento será más lento")
-                        
-                        lazy_loading = info.get('lazy_loading_enabled', False)
-                        if lazy_loading:
-                            st.info("⚡ Carga lazy habilitada - Inicialización rápida")
-                    else:
-                        # Mostrar estado antes de inicializar
-                        import torch
-                        device = "cuda" if torch.cuda.is_available() else "cpu"
-                        if device == 'cuda':
-                            st.success("🚀 GPU disponible - Procesamiento acelerado")
-                        else:
-                            st.warning("🖥️ CPU solamente - El procesamiento será más lento")
-                        st.info("⚡ Carga lazy habilitada - Inicialización diferida")
-            except Exception as e:
-                # Fallback en caso de error
-                st.info("⚡ Carga lazy habilitada - Inicialización diferida")
+            if hasattr(self.diffusion_processor, 'get_info'):
+                info = self.diffusion_processor.get_info()
+                device = info.get('device', 'unknown')
+                
+                if device == 'cuda':
+                    st.success("🚀 GPU disponible - Procesamiento acelerado")
+                else:
+                    st.warning("🖥️ CPU solamente - El procesamiento será más lento")
+                
+                lazy_loading = info.get('lazy_loading_enabled', False)
+                if lazy_loading:
+                    st.info("⚡ Carga lazy habilitada - Inicialización rápida")
             
             st.markdown('<hr style="border-color: #7E57C2; margin: 2rem 0;">', unsafe_allow_html=True)
             
@@ -588,6 +556,32 @@ class ImageEditingApp:
             
             # Botón de procesamiento
             if st.button("🚀 Procesar Imagen", key="process_button", type="primary"):
+                # --- PROCESAMIENTO DE LA IMAGEN USANDO HUGGINGFACE API ---
+                from models.diffusion import DiffusionProcessor
+
+                st.info("Enviando imagen al modelo en HuggingFace... Esto puede tardar unos segundos.")
+
+                dp = DiffusionProcessor()
+
+                result_img, meta = dp.process(
+                    image=st.session_state['original_image'],
+                    method=st.session_state['selected_method'],
+                    prompt=st.session_state.get('prompt', ''),
+                    strength=st.session_state.get('strength', None),
+                    guidance_scale=st.session_state.get('guidance_scale', None),
+                    num_inference_steps=st.session_state.get('steps', None),
+                )
+
+                if result_img is None:
+                    st.error(f"❌ Error al procesar la imagen: {meta.get('error') or meta.get('exception')}")
+                    st.json(meta)   # opcional para debug
+                else:
+                    st.success("✅ Imagen procesada correctamente")
+                    st.image(result_img, caption="Resultado", use_column_width=True)
+                    st.session_state["processed_image"] = result_img
+
+                
+                
                 # Mapear métodos
                 method_mapping = {
                     "inpainting": "inpainting",
